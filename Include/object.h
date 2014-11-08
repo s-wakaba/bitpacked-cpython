@@ -10,8 +10,8 @@ extern "C" {
 #if SIZEOF_VOID_P != 8 || SIZEOF_DOUBLE != 8 || SIZEOF_LONG_LONG != 8
 #error data sizes are inappropreate
 #endif
-typedef signed long BITPACKED_SWORD;
-typedef unsigned long BITPACKED_UWORD;
+typedef signed long long BITPACKED_SWORD;
+typedef unsigned long long BITPACKED_UWORD;
 #endif
 
 /* Object and type object interface */
