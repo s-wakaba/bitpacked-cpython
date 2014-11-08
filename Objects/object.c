@@ -60,6 +60,9 @@ static PyObject refchain = {&refchain, &refchain};
 void
 _Py_AddToAllObjects(PyObject *op, int force)
 {
+#if BITPACKED
+    if(BITPACKED_CHECK(op)) return;
+#endif
 #ifdef  Py_DEBUG
     if (!force) {
         /* If it's initialized memory, op must be in or out of
@@ -1450,10 +1453,12 @@ PyTypeObject _PyNone_Type = {
     none_new,           /*tp_new */
 };
 
+#if !BITPACKED
 PyObject _Py_NoneStruct = {
   _PyObject_EXTRA_INIT
   1, &_PyNone_Type
 };
+#endif
 
 /* NotImplemented is an object that can be used to signal that an
    operation is not implemented for the given type combination. */
@@ -1535,10 +1540,12 @@ PyTypeObject _PyNotImplemented_Type = {
     notimplemented_new, /*tp_new */
 };
 
+#if !BITPACKED
 PyObject _Py_NotImplementedStruct = {
     _PyObject_EXTRA_INIT
     1, &_PyNotImplemented_Type
 };
+#endif
 
 void
 _Py_ReadyTypes(void)
@@ -1712,6 +1719,9 @@ _Py_NewReference(PyObject *op)
 void
 _Py_ForgetReference(PyObject *op)
 {
+#if BITPACKED
+    if(BITPACKED_CHECK(op)) return;
+#endif
 #ifdef SLOW_UNREF_CHECK
     PyObject *p;
 #endif
@@ -2002,6 +2012,28 @@ _Py_Dealloc(PyObject *op)
     _Py_INC_TPFREES(op) _Py_COUNT_ALLOCS_COMMA
     (*Py_TYPE(op)->tp_dealloc)(op);
 }
+#endif
+
+#if BITPACKED
+Py_ssize_t bitpacked_refcnt = 0x10000;
+struct _typeobject *bitpacked_types[16] = {
+    NULL,                     /* ****0000 : MUST BE NULL */
+    &_PyNone_Type,            /* ****0001 */
+    &_PyNotImplemented_Type,  /* ****0010 */
+    NULL,                     /* ****0011 */
+    NULL,                     /* ****0100 */
+    NULL,                     /* ****0101 */
+    NULL,                     /* ****0110 */
+    NULL,                     /* ****0111 */
+    NULL,                     /* ****1000 : MUST BE NULL */
+    NULL,                     /* ****1001 */
+    NULL,                     /* ****1010 */
+    NULL,                     /* ****1011 */
+    NULL,                     /* ****1100 */
+    NULL,                     /* ****1101 */
+    NULL,                     /* ****1110 */
+    NULL                      /* ****1111 */
+};
 #endif
 
 #ifdef __cplusplus

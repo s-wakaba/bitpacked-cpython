@@ -4,6 +4,15 @@
 extern "C" {
 #endif
 
+#define BITPACKED 1
+
+#if BITPACKED
+#if SIZEOF_VOID_P != 8 || SIZEOF_DOUBLE != 8 || SIZEOF_LONG_LONG != 8
+#error data sizes are inappropreate
+#endif
+typedef signed long BITPACKED_SWORD;
+typedef unsigned long BITPACKED_UWORD;
+#endif
 
 /* Object and type object interface */
 
@@ -113,9 +122,25 @@ typedef struct {
     Py_ssize_t ob_size; /* Number of items in variable part */
 } PyVarObject;
 
+#if BITPACKED
+#define BITPACKED_CHECK(ob) (!!((BITPACKED_UWORD)(ob) & 0x0007ULL))
+#define BITPACKED_TYPEID(ob) ((BITPACKED_UWORD)(ob) & 0x000fULL)
+#define BITPACKED_TYPEID_NONE         ((BITPACKED_UWORD)0x0001U)
+#define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0002U)
+extern Py_ssize_t bitpacked_refcnt;
+extern struct _typeobject *bitpacked_types[16];
+#define Py_REFCNT(ob)  (*(BITPACKED_CHECK(ob) \
+                         ?&bitpacked_refcnt \
+                         :&((PyObject*)(ob))->ob_refcnt))
+#define Py_TYPE(ob)    (*(BITPACKED_CHECK(ob) \
+                         ?bitpacked_types+BITPACKED_TYPEID(ob) \
+                         :&((PyObject*)(ob))->ob_type))
+#define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
+#else
 #define Py_REFCNT(ob)           (((PyObject*)(ob))->ob_refcnt)
 #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
+#endif
 
 /********************* String Literals ****************************************/
 /* This structure helps managing static strings. The basic usage goes like this:
@@ -848,8 +873,12 @@ where NULL (nil) is not suitable (since NULL often means 'error').
 
 Don't forget to apply Py_INCREF() when returning this value!!!
 */
+#if BITPACKED
+#define Py_None ((PyObject*)BITPACKED_TYPEID_NONE)
+#else
 PyAPI_DATA(PyObject) _Py_NoneStruct; /* Don't use this directly */
 #define Py_None (&_Py_NoneStruct)
+#endif
 
 /* Macro for returning Py_None from a function */
 #define Py_RETURN_NONE return Py_INCREF(Py_None), Py_None
@@ -858,8 +887,12 @@ PyAPI_DATA(PyObject) _Py_NoneStruct; /* Don't use this directly */
 Py_NotImplemented is a singleton used to signal that an operation is
 not implemented for a given type combination.
 */
+#if BITPACKED
+#define Py_NotImplemented ((PyObject*)BITPACKED_TYPEID_NOTIMPL)
+#else
 PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
 #define Py_NotImplemented (&_Py_NotImplementedStruct)
+#endif
 
 /* Macro for returning Py_NotImplemented from a function */
 #define Py_RETURN_NOTIMPLEMENTED \
