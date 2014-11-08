@@ -706,7 +706,7 @@ PyAPI_FUNC(Py_ssize_t) _Py_GetRefTotal(void);
 #define _Py_DEC_REFTOTAL        _Py_RefTotal--
 #define _Py_REF_DEBUG_COMMA     ,
 #define _Py_CHECK_REFCNT(OP)                                    \
-{       if (((PyObject*)OP)->ob_refcnt < 0)                             \
+{       if (Py_REFCNT(OP) < 0)                                  \
                 _Py_NegativeRefcount(__FILE__, __LINE__,        \
                                      (PyObject *)(OP));         \
 }
@@ -762,13 +762,13 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
 #define Py_INCREF(op) (                         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-    ((PyObject *)(op))->ob_refcnt++)
+    Py_REFCNT(op)++)
 
 #define Py_DECREF(op)                                   \
     do {                                                \
         PyObject *_py_decref_tmp = (PyObject *)(op);    \
         if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-        --(_py_decref_tmp)->ob_refcnt != 0)             \
+        --Py_REFCNT(_py_decref_tmp) != 0)               \
             _Py_CHECK_REFCNT(_py_decref_tmp)            \
         else                                            \
         _Py_Dealloc(_py_decref_tmp);                    \

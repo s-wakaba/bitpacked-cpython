@@ -267,7 +267,7 @@ static void
 PyCField_dealloc(PyObject *self)
 {
     PyCField_clear((CFieldObject *)self);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 static PyObject *
@@ -1181,7 +1181,7 @@ u_set(void *ptr, PyObject *value, Py_ssize_t size)
     if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
-                        value->ob_type->tp_name);
+                        Py_TYPE(value)->tp_name);
         return NULL;
     } else
         Py_INCREF(value);
@@ -1243,7 +1243,7 @@ U_set(void *ptr, PyObject *value, Py_ssize_t length)
     if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
-                        value->ob_type->tp_name);
+                        Py_TYPE(value)->tp_name);
         return NULL;
     } else
         Py_INCREF(value);
@@ -1296,7 +1296,7 @@ s_set(void *ptr, PyObject *value, Py_ssize_t length)
     } else {
         PyErr_Format(PyExc_TypeError,
                      "expected bytes, %s found",
-                     value->ob_type->tp_name);
+                     Py_TYPE(value)->tp_name);
         return NULL;
     }
 
@@ -1345,7 +1345,7 @@ z_set(void *ptr, PyObject *value, Py_ssize_t size)
     }
     PyErr_Format(PyExc_TypeError,
                  "bytes or integer address expected instead of %s instance",
-                 value->ob_type->tp_name);
+                 Py_TYPE(value)->tp_name);
     return NULL;
 }
 
@@ -1394,7 +1394,7 @@ Z_set(void *ptr, PyObject *value, Py_ssize_t size)
     if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                      "unicode string or integer address expected instead of %s instance",
-                     value->ob_type->tp_name);
+                     Py_TYPE(value)->tp_name);
         return NULL;
     }
 

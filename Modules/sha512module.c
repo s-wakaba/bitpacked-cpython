@@ -466,7 +466,7 @@ SHA512_copy(SHAobject *self, PyObject *unused)
 {
     SHAobject *newobj;
 
-    if (((PyObject*)self)->ob_type == &SHA512type) {
+    if (Py_TYPE(self) == &SHA512type) {
         if ( (newobj = newSHA512object())==NULL)
             return NULL;
     } else {
