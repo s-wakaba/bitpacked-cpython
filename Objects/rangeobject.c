@@ -17,6 +17,28 @@ typedef struct {
     PyObject *step;
     PyObject *length;
 } rangeobject;
+#if BITPACKED
+typedef union{
+    struct{
+#if PY_LITTLE_ENDIAN
+        char reserved;
+        signed char step;
+        short start;
+        short stop;
+        unsigned short length;
+#else
+        short start;
+        short stop;
+        unsigned short length;
+        signed char step;
+        char reserved;
+#endif
+    };
+    BITPACKED_UWORD uword;
+    PyObject* pyobj;
+    rangeobject* rangeobj;
+} bitpacked_rangeobject;
+#endif
 
 /* Helper function for validating step.  Always returns a new reference or
    NULL on error.
@@ -54,6 +76,44 @@ make_range_object(PyTypeObject *type, PyObject *start,
 {
     rangeobject *obj = NULL;
     PyObject *length;
+#if BITPACKED
+    bitpacked_static_assert(sizeof(BITPACKED_UWORD) == sizeof(bitpacked_rangeobject));
+    if(type == &PyRange_Type) do{
+        int overflow;
+        long n_start, n_stop, n_step;
+        bitpacked_rangeobject w_ret;
+        n_start = PyLong_AsLongAndOverflow(start,  &overflow);
+        if(n_start == -1 && PyErr_Occurred()) return NULL;
+        if(overflow || n_start < SHRT_MIN || SHRT_MAX < n_start) break;
+        n_stop = PyLong_AsLongAndOverflow(stop,  &overflow);
+        if(n_stop == -1 && PyErr_Occurred()) return NULL;
+        if(overflow || n_stop < SHRT_MIN || SHRT_MAX < n_stop) break;
+        n_step = PyLong_AsLongAndOverflow(step,  &overflow);
+        if(n_step == -1 && PyErr_Occurred()) return NULL;
+        if(overflow || n_step < SCHAR_MIN || SCHAR_MAX < n_step) break;
+        Py_DECREF(start);
+        Py_DECREF(stop);
+        Py_DECREF(step);
+        if(n_step == 0) {
+            PyErr_SetString(PyExc_ValueError,
+                            "range() arg 3 must not be zero");
+            return NULL;
+        }
+        w_ret.uword = BITPACKED_TYPEID_RANGE;
+        w_ret.start = n_start;
+        w_ret.stop = n_stop;
+        w_ret.step = n_step;
+        if(n_step < 0){
+            long temp = n_start;
+            n_start = n_stop;
+            n_stop = temp;
+            n_step = -n_step;
+        }
+        w_ret.length = n_start >= n_stop ? 0 :  (((n_stop - n_start) - 1) / n_step) + 1;
+        Py_INCREF(w_ret.pyobj);
+        return w_ret.rangeobj;
+    }while(0);
+#endif
     length = compute_range_length(start, stop, step);
     if (length == NULL) {
         return NULL;
@@ -229,6 +289,11 @@ compute_range_length(PyObject *start, PyObject *stop, PyObject *step)
 static Py_ssize_t
 range_length(rangeobject *r)
 {
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        return ((bitpacked_rangeobject*)(&r))->length;
+    }
+#endif
     return PyLong_AsSsize_t(r->length);
 }
 
@@ -248,12 +313,29 @@ compute_item(rangeobject *r, PyObject *i)
 }
 
 static PyObject *
+range_item(rangeobject *r, Py_ssize_t i);
+
+static PyObject *
 compute_range_item(rangeobject *r, PyObject *arg)
 {
     int cmp_result;
     PyObject *i, *result;
 
-    PyObject *zero = PyLong_FromLong(0);
+    PyObject *zero;
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        int overflow;
+        Py_ssize_t i = PyLong_AsLongAndOverflow(arg, &overflow);
+        if(i == -1 && PyErr_Occurred()) return NULL;
+        if(overflow) {
+            PyErr_SetString(PyExc_IndexError,
+                            "range object index out of range");
+            return NULL;
+        }
+        return range_item(r, i);
+    }
+#endif
+    zero = PyLong_FromLong(0);
     if (zero == NULL)
         return NULL;
 
@@ -309,7 +391,20 @@ compute_range_item(rangeobject *r, PyObject *arg)
 static PyObject *
 range_item(rangeobject *r, Py_ssize_t i)
 {
-    PyObject *res, *arg = PyLong_FromSsize_t(i);
+    PyObject *res, *arg;
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        if(i<0) i += w->length;
+        if(i < 0 || w->length <= i) {
+            PyErr_SetString(PyExc_IndexError,
+                            "range object index out of range");
+            return NULL;
+        }
+        return PyLong_FromLong(w->start + w->step * i);
+    }
+#endif
+    arg = PyLong_FromSsize_t(i);
     if (!arg) {
         return NULL;
     }
@@ -327,6 +422,40 @@ compute_slice(rangeobject *r, PyObject *_slice)
     PyObject *substart = NULL, *substop = NULL, *substep = NULL;
     int error;
 
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject w;
+        Py_ssize_t n_start, n_stop, n_step, n_length;
+        w.rangeobj = r;
+        error = PySlice_GetIndicesEx(_slice, w.length, &n_start, &n_stop, &n_step, &n_length);
+        if (error == -1) return NULL;
+        n_start = w.start + (n_start * w.step);
+        n_stop = w.start + (n_stop * w.step);
+        n_step = w.step * n_step;
+        if((n_start < n_stop) != (n_step > 0)) n_stop = n_start;
+        if(SCHAR_MIN <= n_step && n_step <= SCHAR_MAX) {
+            w.start = n_start;
+            w.stop = n_stop;
+            w.step = n_step;
+            w.length = n_length;
+            Py_INCREF(w.pyobj);
+            return w.pyobj;
+        }else{
+            PyObject *args = Py_BuildValue("nnn", n_start, n_stop, n_step);
+            if(!args){
+                return NULL;
+            }
+            result = make_range_object(Py_TYPE(r), PyTuple_GET_ITEM(args, 0), PyTuple_GET_ITEM(args, 1), PyTuple_GET_ITEM(args, 2));
+            if(result != NULL){
+                PyTuple_SET_ITEM(args, 0, NULL);
+                PyTuple_SET_ITEM(args, 1, NULL);
+                PyTuple_SET_ITEM(args, 2, NULL);
+            }
+            Py_DECREF(args);
+            return (PyObject*)result;
+        }
+    }
+#endif
     error = _PySlice_GetLongIndices(slice, r->length, &start, &stop, &step);
     if (error == -1)
         return NULL;
@@ -367,6 +496,21 @@ range_contains_long(rangeobject *r, PyObject *ob)
     PyObject *zero = NULL;
     int result = -1;
 
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        int overflow;
+        long n = PyLong_AsLongAndOverflow(ob, &overflow);
+        if(n == -1 && PyErr_Occurred()) return -1;
+        if(overflow) return 0;
+        if(w->step > 0){
+            if(!(w->start <= n && n < w->stop)) return 0;
+        }else{
+            if(!(w->stop < n && n <= w->start)) return 0;
+        }
+        return (n - w->start) % w->step == 0 ? 1 : 0;
+    }
+#endif
     zero = PyLong_FromLong(0);
     if (zero == NULL) /* MemoryError in int(0) */
         goto end;
@@ -441,6 +585,36 @@ range_equals(rangeobject *r0, rangeobject *r1)
 
     if (r0 == r1)
         return 1;
+#if BITPACKED
+    if(BITPACKED_CHECK(r0)) {
+        bitpacked_rangeobject *w0 = (bitpacked_rangeobject*)(&r0);
+        long n_length, n_start, n_step;
+        if(BITPACKED_CHECK(r1)){
+            bitpacked_rangeobject *w1 = (bitpacked_rangeobject*)(&r1);
+            n_length = w1->length;
+            n_start = w1->start;
+            n_step = w1->step;
+        }else{
+            int overflow;
+            n_length = PyLong_AsLongAndOverflow(r1->length, &overflow);
+            if(n_length == -1 && PyErr_Occurred()) return -1;
+            if(overflow) n_length = LONG_MAX;
+            n_start = PyLong_AsLongAndOverflow(r1->start, &overflow);
+            if(n_start == -1 && PyErr_Occurred()) return -1;
+            if(overflow) n_start = LONG_MAX;
+            n_step = PyLong_AsLongAndOverflow(r1->step, &overflow);
+            if(n_step == -1 && PyErr_Occurred()) return -1;
+            if(overflow) n_step = LONG_MAX;
+        }
+        if(w0->length != n_length) return 0;
+        if(w0->length == 0) return 1;
+        if(w0->start != n_start) return 0;
+        if(w0->length == 1) return 1;
+        return w0->step == n_step ? 1 : 0;
+    }else if(BITPACKED_CHECK(r1)){
+        return range_equals(r1, r0);
+    }
+#endif
     cmp_result = PyObject_RichCompareBool(r0->length, r1->length, Py_EQ);
     /* Return False or error to the caller. */
     if (cmp_result != 1)
@@ -509,6 +683,23 @@ range_hash(rangeobject *r)
     Py_hash_t result = -1;
     int cmp_result;
 
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        t = NULL;
+        if(w->length == 0){
+            t = Py_BuildValue("iss", 0, NULL, NULL);
+        }else if(w->length == 1){
+            t = Py_BuildValue("ihs", 1, w->start, NULL);
+        }else{
+            t = Py_BuildValue("Hhb", w->length, w->start, w->step);
+        }
+        if (!t) return -1;
+        result = PyObject_Hash(t);
+        Py_DECREF(t);
+        return result;
+    }
+#endif
     t = PyTuple_New(3);
     if (!t)
         return -1;
@@ -587,7 +778,16 @@ range_index(rangeobject *r, PyObject *ob)
         return NULL;
 
     if (contains) {
-        PyObject *idx, *tmp = PyNumber_Subtract(ob, r->start);
+        PyObject *idx, *tmp;
+#if BITPACKED
+        if(BITPACKED_CHECK(r)){
+            bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+            long n = PyLong_AsLong(ob);
+            if(n == -1 && PyErr_Occurred()) return NULL;
+            return PyLong_FromLong((n - w->start) / w->step);
+        }
+#endif
+        tmp = PyNumber_Subtract(ob, r->start);
         if (tmp == NULL)
             return NULL;
         /* idx = (ob - r.start) // r.step */
@@ -617,6 +817,16 @@ range_repr(rangeobject *r)
 {
     Py_ssize_t istep;
 
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        if(w->step == 1){
+            return PyUnicode_FromFormat("range(%d, %d)", w->start, w->stop);
+        }else{
+            return PyUnicode_FromFormat("range(%d, %d, %d)", w->start, w->stop, w->step);
+        }
+    }
+#endif
     /* Check for special case values for printing.  We don't always
        need the step value.  We don't care about errors
        (it means overflow), so clear the errors. */
@@ -636,6 +846,13 @@ range_repr(rangeobject *r)
 static PyObject *
 range_reduce(rangeobject *r, PyObject *args)
 {
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        return Py_BuildValue("(O(hhb))",Py_TYPE(r),
+                         w->start, w->stop, w->step);
+    }
+#endif
     return Py_BuildValue("(O(OOO))", Py_TYPE(r),
                          r->start, r->stop, r->step);
 }
@@ -689,12 +906,44 @@ static PyMethodDef range_methods[] = {
     {NULL,              NULL}           /* sentinel */
 };
 
+#if BITPACKED
+static int GETSET_START = 1;
+static int GETSET_STOP = 2;
+static int GETSET_STEP = 3;
+static PyObject*
+bitpacked_range_getset(rangeobject *r, int *closure) {
+    PyObject *result = NULL;
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        switch(*closure) {
+        case 1: return PyLong_FromLong(w->start);
+        case 2: return PyLong_FromLong(w->stop);
+        case 3: return PyLong_FromLong(w->step);
+        }
+    }else{
+        switch(*closure) {
+        case 1: result = r->start; break;
+        case 2: result = r->stop; break;
+        case 3: result = r->step; break;
+        }
+    }
+    Py_XINCREF(result);
+    return result;
+}
+static PyGetSetDef bitpacked_range_members[] = {
+    {"start", (getter)bitpacked_range_getset, NULL, NULL, &GETSET_START},
+    {"stop", (getter)bitpacked_range_getset, NULL, NULL, &GETSET_STOP},
+    {"step", (getter)bitpacked_range_getset, NULL, NULL, &GETSET_STEP},
+    {0}
+};
+#else
 static PyMemberDef range_members[] = {
     {"start",   T_OBJECT_EX,    offsetof(rangeobject, start),   READONLY},
     {"stop",    T_OBJECT_EX,    offsetof(rangeobject, stop),    READONLY},
     {"step",    T_OBJECT_EX,    offsetof(rangeobject, step),    READONLY},
     {0}
 };
+#endif
 
 PyTypeObject PyRange_Type = {
         PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -725,8 +974,13 @@ PyTypeObject PyRange_Type = {
         range_iter,             /* tp_iter */
         0,                      /* tp_iternext */
         range_methods,          /* tp_methods */
+#if BITPACKED
+        0,                      /* tp_members */
+        bitpacked_range_members,   /* tp_getset */
+#else
         range_members,          /* tp_members */
         0,                      /* tp_getset */
+#endif
         0,                      /* tp_base */
         0,                      /* tp_dict */
         0,                      /* tp_descr_get */
@@ -1112,6 +1366,12 @@ range_iter(PyObject *seq)
 
     assert(PyRange_Check(seq));
 
+#if BITPACKED
+    if(BITPACKED_CHECK(r)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&r);
+        return fast_range_iter(w->start, w->stop, w->step);
+    }
+#endif
     /* If all three fields and the length convert to long, use the int
      * version */
     lstart = PyLong_AsLong(r->start);
@@ -1170,6 +1430,14 @@ range_reverse(PyObject *seq)
     unsigned long ulen;
 
     assert(PyRange_Check(seq));
+#if BITPACKED
+    if(BITPACKED_CHECK(range)){
+        bitpacked_rangeobject *w = (bitpacked_rangeobject*)(&range);
+        new_stop = w->start - w->step;
+        new_start = new_stop + w->length * w->step;
+        return fast_range_iter(new_start, new_stop, -w->step);
+    }
+#endif
 
     /* reversed(range(start, stop, step)) can be expressed as
        range(start+(n-1)*step, start-step, -step), where n is the number of

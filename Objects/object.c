@@ -2015,24 +2015,24 @@ _Py_Dealloc(PyObject *op)
 #endif
 
 #if BITPACKED
-Py_ssize_t bitpacked_refcnt = 0x10000;
+Py_ssize_t bitpacked_refcnt = 0x100;
 struct _typeobject *bitpacked_types[16] = {
-    NULL,                     /* ****0000 : MUST BE NULL */
-    &_PyNone_Type,            /* ****0001 */
-    &_PyNotImplemented_Type,  /* ****0010 */
-    NULL,                     /* ****0011 */
-    NULL,                     /* ****0100 */
-    NULL,                     /* ****0101 */
-    NULL,                     /* ****0110 */
-    NULL,                     /* ****0111 */
-    NULL,                     /* ****1000 : MUST BE NULL */
-    NULL,                     /* ****1001 */
-    NULL,                     /* ****1010 */
-    NULL,                     /* ****1011 */
-    NULL,                     /* ****1100 */
-    NULL,                     /* ****1101 */
-    NULL,                     /* ****1110 */
-    NULL                      /* ****1111 */
+    NULL,                     /* ***0000* : MUST BE NULL */
+    &_PyNone_Type,            /* ***0001* */
+    &_PyNotImplemented_Type,  /* ***0010* */
+    NULL,                     /* ***0011* */
+    NULL,                     /* ***0100* : MUST BE NULL */
+    NULL,                     /* ***0101* */
+    NULL,                     /* ***0110* */
+    NULL,                     /* ***0111* */
+    NULL,                     /* ***1000* : MUST BE NULL */
+    &PyRange_Type,            /* ***1001* */
+    NULL,                     /* ***1010* */
+    NULL,                     /* ***1011* */
+    NULL,                     /* ***1100* : MUST BE NULL */
+    NULL,                     /* ***1101* */
+    NULL,                     /* ***1110* */
+    NULL                      /* ***1111* */
 };
 #endif
 

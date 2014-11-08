@@ -5,13 +5,17 @@ extern "C" {
 #endif
 
 #define BITPACKED 1
-
+/*
+ * Modules/_elementtree.c uses lowest bit of PyObject* pointer as an
+ * internal flag,
+ */
 #if BITPACKED
 #if SIZEOF_VOID_P != 8 || SIZEOF_DOUBLE != 8 || SIZEOF_LONG_LONG != 8
 #error data sizes are inappropreate
 #endif
 typedef signed long long BITPACKED_SWORD;
 typedef unsigned long long BITPACKED_UWORD;
+#define bitpacked_static_assert(c) do{int n[(c)?1:-1]; if(n[0]) break; }while(0)
 #endif
 
 /* Object and type object interface */
@@ -123,17 +127,18 @@ typedef struct {
 } PyVarObject;
 
 #if BITPACKED
-#define BITPACKED_CHECK(ob) (!!((BITPACKED_UWORD)(ob) & 0x0007ULL))
-#define BITPACKED_TYPEID(ob) ((BITPACKED_UWORD)(ob) & 0x000fULL)
-#define BITPACKED_TYPEID_NONE         ((BITPACKED_UWORD)0x0001U)
-#define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0002U)
+#define BITPACKED_CHECK(ob) (!!((BITPACKED_UWORD)(ob) & 0x0006ULL))
+#define BITPACKED_TYPEID(ob) ((BITPACKED_UWORD)(ob) & 0x001eULL)
+#define BITPACKED_TYPEID_NONE         ((BITPACKED_UWORD)0x0002U)
+#define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0004U)
+#define BITPACKED_TYPEID_RANGE        ((BITPACKED_UWORD)0x0012U)
 extern Py_ssize_t bitpacked_refcnt;
 extern struct _typeobject *bitpacked_types[16];
 #define Py_REFCNT(ob)  (*(BITPACKED_CHECK(ob) \
                          ?&bitpacked_refcnt \
                          :&((PyObject*)(ob))->ob_refcnt))
 #define Py_TYPE(ob)    (*(BITPACKED_CHECK(ob) \
-                         ?bitpacked_types+BITPACKED_TYPEID(ob) \
+                         ?bitpacked_types+(BITPACKED_TYPEID(ob)>>1) \
                          :&((PyObject*)(ob))->ob_type))
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
 #else
