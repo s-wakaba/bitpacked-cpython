@@ -18,7 +18,7 @@ Now, objects of following types allow storeing with the **bitpacked** mode.
 
 * `NoneType`
 * `NotImplementedType`
-* `float` (Not extremely big or small absolute value, appx. in range: `4.656e-10 < abs(val) < 8.589e9` and `nan, +inf, -inf`)
+* `float` (Not extremely big or small absolute value, appx. in range: `4.656e-10 < abs(val) < 8.589e9` and `0.0, +inf, -inf, nan`)
 * `range` (Not big absolute values of start, end or step)
 
 I have plan to additional support of following types.
