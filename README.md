@@ -11,7 +11,7 @@ Only objects satisfying some conditions can be stored it into alternative 61bit 
 
 * Small enough to store
 * Immutable
-* Not allowing direct access to inside of object via C-API (e.g. buffer protocol objects)
+* Not allowing direct access to inside of object members via C-API (e.g. `str, tuple` and buffer protocol objects like `bytes`)
 
 ##Supported Types
 Now, objects of following types allow storeing with the **bitpacked** mode.
@@ -25,7 +25,6 @@ I have plan to additional support of following types.
 
 * `int` (Not big absolute value)
 * `bool`
-* `str` (Short and consisting of limited charactor set)
 * `slice`
 
 ##Difference from normal CPython
@@ -36,7 +35,7 @@ Results of `id(bitpacked_obj)` are not indicate memory address but packed data s
 >>> id(3.14159265) % 8
 6
 >>> '%016x' % id(range(0x1122, 0x3344, 0x55))
-'0067334411225512'
+'0067334411225512' # Length(16bit),End(16bit),Start(16bit),Step(8bit),Type-ID
 ```
 
 Results of `is` operator with the same bit-packed values are True even if values come from different operations.
@@ -65,5 +64,9 @@ username  7692  3.4  0.1 215156 86440 pts/15   S+   12:35   0:02 ./python
 USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
 username  7695 10.3  0.4 452912 323560 pts/15  S+   12:37   0:02 python3
 ```
+
+##License
+
+This is licenesed on **PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2**.
 
 Have fun!
