@@ -13,6 +13,7 @@ Only objects satisfying some conditions can be stored it into alternative 61bit 
 * Immutable
 * Not allowing direct access to inside of object via C-API (e.g. buffer protocol objects)
 
+##Supported Types
 Now, objects of following types allow storeing with the **bitpacked** mode.
 
 * `NoneType`
@@ -24,7 +25,45 @@ I have plan to additional support of following types.
 
 * `int` (Not big absolute value)
 * `bool`
-* `store` (Short and using limited charactor set)
+* `str` (Short and consisting of limited charactor set)
 * `slice`
+
+##Difference from normal CPython
+Results of `id(bitpacked_obj)` are not indicate memory address but packed data structure.
+```py
+>>> id(None)
+2
+>>> id(3.14159265) % 8
+6
+>>> '%016x' % id(range(0x1122, 0x3344, 0x55))
+'0067334411225512'
+```
+
+Results of `is` operator with the same bit-packed values are True even if values come from different operations.
+
+```py
+>>> (3.0 * 4.0) is (2.0 * 6.0)
+True
+>>> range(0, 300, 4)[::3] is range(0, 600, 2)[:150:6]
+True
+```
+
+In particular case, memory consumption can be significantly saved.
+
+```
+# bit-packed
+>>> from os import getpid
+>>> from subprocess import call
+>>> a = [0.1 * i for i in range(10000000)]
+>>> call(['ps', 'u' ,'-p', str(getpid())])
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+username  7692  3.4  0.1 215156 86440 pts/15   S+   12:35   0:02 ./python
+
+# normal
+>>> a = [0.1 * i for i in range(10000000)]
+>>> call(['ps', 'u' ,'-p', str(getpid())])
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+username  7695 10.3  0.4 452912 323560 pts/15  S+   12:37   0:02 python3
+```
 
 Have fun!
