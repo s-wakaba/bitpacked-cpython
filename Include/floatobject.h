@@ -48,7 +48,14 @@ PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
    speed. */
 PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
 #ifndef Py_LIMITED_API
+#if BITPACKED
+PyAPI_FUNC(double) _bitpacked_float_as_double(void*);
+#define PyFloat_AS_DOUBLE(op) (BITPACKED_CHECK(op) \
+                              ?_bitpacked_float_as_double(op) \
+                              :((PyFloatObject *)(op))->ob_fval)
+#else
 #define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
+#endif
 #endif
 
 #ifndef Py_LIMITED_API

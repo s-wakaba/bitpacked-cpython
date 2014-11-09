@@ -1326,7 +1326,7 @@ PyNumber_Float(PyObject *o)
     }
     if (PyFloat_Check(o)) { /* A float subclass with nb_float == NULL */
         PyFloatObject *po = (PyFloatObject *)o;
-        return PyFloat_FromDouble(po->ob_fval);
+        return PyFloat_FromDouble(PyFloat_AS_DOUBLE(po));
     }
     return PyFloat_FromString(o);
 }

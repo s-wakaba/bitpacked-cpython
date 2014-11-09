@@ -131,6 +131,7 @@ typedef struct {
 #define BITPACKED_TYPEID(ob) ((BITPACKED_UWORD)(ob) & 0x001eULL)
 #define BITPACKED_TYPEID_NONE         ((BITPACKED_UWORD)0x0002U)
 #define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0004U)
+#define BITPACKED_TYPEID_FLOAT        ((BITPACKED_UWORD)0x0006U)
 #define BITPACKED_TYPEID_RANGE        ((BITPACKED_UWORD)0x0012U)
 extern Py_ssize_t bitpacked_refcnt;
 extern struct _typeobject *bitpacked_types[16];

@@ -2020,7 +2020,7 @@ struct _typeobject *bitpacked_types[16] = {
     NULL,                     /* ***0000* : MUST BE NULL */
     &_PyNone_Type,            /* ***0001* */
     &_PyNotImplemented_Type,  /* ***0010* */
-    NULL,                     /* ***0011* */
+    &PyFloat_Type,            /* ***0011* : 4th bit is part of data */
     NULL,                     /* ***0100* : MUST BE NULL */
     NULL,                     /* ***0101* */
     NULL,                     /* ***0110* */
@@ -2028,7 +2028,7 @@ struct _typeobject *bitpacked_types[16] = {
     NULL,                     /* ***1000* : MUST BE NULL */
     &PyRange_Type,            /* ***1001* */
     NULL,                     /* ***1010* */
-    NULL,                     /* ***1011* */
+    &PyFloat_Type,            /* ***1011* : 4th bit is part of data */
     NULL,                     /* ***1100* : MUST BE NULL */
     NULL,                     /* ***1101* */
     NULL,                     /* ***1110* */
