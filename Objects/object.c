@@ -2015,8 +2015,8 @@ _Py_Dealloc(PyObject *op)
 #endif
 
 #if BITPACKED
-Py_ssize_t bitpacked_refcnt = 0x100;
-struct _typeobject *bitpacked_types[16] = {
+Py_ssize_t const bitpacked_refcnt = 0x100;
+struct _typeobject *const bitpacked_types[16] = {
     NULL,                     /* ***0000* : MUST BE NULL */
     &_PyNone_Type,            /* ***0001* */
     &_PyNotImplemented_Type,  /* ***0010* */

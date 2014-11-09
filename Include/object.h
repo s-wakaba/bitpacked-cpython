@@ -133,13 +133,13 @@ typedef struct {
 #define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0004U)
 #define BITPACKED_TYPEID_FLOAT        ((BITPACKED_UWORD)0x0006U)
 #define BITPACKED_TYPEID_RANGE        ((BITPACKED_UWORD)0x0012U)
-extern Py_ssize_t bitpacked_refcnt;
-extern struct _typeobject *bitpacked_types[16];
+extern Py_ssize_t const bitpacked_refcnt;
+extern struct _typeobject *const bitpacked_types[16];
 #define Py_REFCNT(ob)  (*(BITPACKED_CHECK(ob) \
-                         ?&bitpacked_refcnt \
+                         ?(Py_ssize_t*)(&bitpacked_refcnt) \
                          :&((PyObject*)(ob))->ob_refcnt))
 #define Py_TYPE(ob)    (*(BITPACKED_CHECK(ob) \
-                         ?bitpacked_types+(BITPACKED_TYPEID(ob)>>1) \
+                         ?(struct _typeobject**)(bitpacked_types+(BITPACKED_TYPEID(ob)>>1)) \
                          :&((PyObject*)(ob))->ob_type))
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
 #else
@@ -791,6 +791,23 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 #endif
 #endif /* !Py_TRACE_REFS */
 
+#if BITPACKED
+#define Py_INCREF(op) (                         \
+    (BITPACKED_CHECK(op) ? *((Py_ssize_t*)(&bitpacked_refcnt)) \
+                      : (_Py_INC_REFTOTAL _Py_REF_DEBUG_COMMA \
+                         Py_REFCNT((PyObject *)(op))++)))
+
+#define Py_DECREF(op)                                   \
+    do {                                                \
+        PyObject *_py_decref_tmp = (PyObject *)(op);    \
+        if(BITPACKED_CHECK(op)) break;                     \
+        if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
+        --Py_REFCNT(_py_decref_tmp) != 0)               \
+            _Py_CHECK_REFCNT(_py_decref_tmp)            \
+        else                                            \
+        _Py_Dealloc(_py_decref_tmp);                    \
+    } while (0)
+#else
 #define Py_INCREF(op) (                         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
     Py_REFCNT(op)++)
@@ -804,6 +821,7 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
         else                                            \
         _Py_Dealloc(_py_decref_tmp);                    \
     } while (0)
+#endif
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementatons.
