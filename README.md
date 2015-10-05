@@ -57,6 +57,19 @@ True
 True
 ```
 
+Because of bit-packed objects have no dinamically allocated memory spaces, they have no reference counters.
+`sys.getrefcount` returns a constant, dummy number when its argument is bit-packed.
+
+```py
+>>> from sys import getrefcount
+>>> a = [12345]
+>>> getrefcount(a[0])
+8128 # dummy number
+>>> b = a * 10000
+>>> getrefcount(a[0])
+8128 # not incremented
+```
+
 In particular case, memory consumption can be significantly saved.
 
 ```
