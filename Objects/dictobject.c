@@ -3101,7 +3101,7 @@ static PyObject *dictiter_iternextitem(dictiterobject *di)
     if (i > mask)
         goto fail;
 
-    if (result->ob_refcnt == 1) {
+    if (Py_REFCNT(result) == 1) {
         Py_INCREF(result);
         Py_DECREF(PyTuple_GET_ITEM(result, 0));
         Py_DECREF(PyTuple_GET_ITEM(result, 1));
@@ -3246,7 +3246,7 @@ _PyDictView_New(PyObject *dict, PyTypeObject *type)
         /* XXX Get rid of this restriction later */
         PyErr_Format(PyExc_TypeError,
                      "%s() requires a dict argument, not '%s'",
-                     type->tp_name, dict->ob_type->tp_name);
+                     type->tp_name, Py_TYPE(dict)->tp_name);
         return NULL;
     }
     dv = PyObject_GC_New(_PyDictViewObject, type);

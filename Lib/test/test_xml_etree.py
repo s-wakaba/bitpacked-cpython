@@ -1465,6 +1465,7 @@ class BugsTest(unittest.TestCase):
             'A new cultivar of Begonia plant named \u2018BCT9801BEG\u2019.')
 
     def test_bug_xmltoolkit63(self):
+        from sysconfig import get_config_vars
         # Check reference leak.
         def xmltoolkit63():
             tree = ET.TreeBuilder()
@@ -1476,7 +1477,7 @@ class BugsTest(unittest.TestCase):
         count = sys.getrefcount(None)
         for i in range(1000):
             xmltoolkit63()
-        self.assertEqual(sys.getrefcount(None), count)
+        if not get_config_vars().get('BITPACKED'): self.assertEqual(sys.getrefcount(None), count)
 
     def test_bug_200708_newline(self):
         # Preserve newlines in attributes.

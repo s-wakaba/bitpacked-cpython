@@ -1286,7 +1286,7 @@ mbstreamreader_iread(MultibyteStreamReaderObject *self,
             PyErr_Format(PyExc_TypeError,
                          "stream function returned a "
                          "non-bytes object (%.100s)",
-                         cres->ob_type->tp_name);
+                         Py_TYPE(cres)->tp_name);
             goto errorexit;
         }
 

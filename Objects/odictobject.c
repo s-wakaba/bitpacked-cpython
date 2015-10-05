@@ -1938,7 +1938,7 @@ odictiter_iternext(odictiterobject *di)
         }
         Py_INCREF(value);
 
-        if (result->ob_refcnt == 1) {
+        if (Py_REFCNT(result) == 1) {
             /* not in use so we can reuse it
              * (the common case during iteration) */
             Py_INCREF(result);

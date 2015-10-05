@@ -622,6 +622,8 @@ class PyBuildExt(build_ext):
         exts.append( Extension('_testimportmultiple', ['_testimportmultiple.c']) )
         # Test multi-phase extension module init (PEP 489)
         exts.append( Extension('_testmultiphase', ['_testmultiphase.c']) )
+        # Test bitpacked mode
+        exts.append( Extension('_testbitpacked', ['_testbitpacked.c']) )
         # profiler (_lsprof is for cProfile.py)
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database

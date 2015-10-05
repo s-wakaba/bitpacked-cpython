@@ -171,6 +171,7 @@ PyTypeObject PyBool_Type = {
     bool_new,                                   /* tp_new */
 };
 
+#ifndef BITPACKED
 /* The objects representing bool values False and True */
 
 struct _longobject _Py_FalseStruct = {
@@ -182,3 +183,4 @@ struct _longobject _Py_TrueStruct = {
     PyVarObject_HEAD_INIT(&PyBool_Type, 1)
     { 1 }
 };
+#endif

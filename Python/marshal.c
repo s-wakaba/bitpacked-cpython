@@ -213,6 +213,8 @@ w_PyLong(const PyLongObject *ob, char flag, WFILE *p)
     Py_ssize_t i, j, n, l;
     digit d;
 
+    assert(!BITPACKED_CHECK(ob));
+
     W_TYPE(TYPE_LONG, p);
     if (Py_SIZE(ob) == 0) {
         w_long((long)0, p);
@@ -260,7 +262,7 @@ w_ref(PyObject *v, char *flag, WFILE *p)
         return 0; /* not writing object references */
 
     /* if it has only one reference, it definitely isn't shared */
-    if (Py_REFCNT(v) == 1)
+    if ((!BITPACKED_CHECK(v)) && Py_REFCNT(v) == 1)
         return 0;
 
     entry = _Py_hashtable_get_entry(p->hashtable, v);
@@ -1669,7 +1671,7 @@ marshal_load(PyObject *self, PyObject *f)
     if (!PyBytes_Check(data)) {
         PyErr_Format(PyExc_TypeError,
                      "f.read() returned not bytes but %.100s",
-                     data->ob_type->tp_name);
+                     Py_TYPE(data)->tp_name);
         result = NULL;
     }
     else {

@@ -323,7 +323,7 @@ sys_intern(PyObject *self, PyObject *args)
     }
     else {
         PyErr_Format(PyExc_TypeError,
-                        "can't intern %.400s", s->ob_type->tp_name);
+                        "can't intern %.400s", Py_TYPE(s)->tp_name);
         return NULL;
     }
 }
@@ -990,7 +990,11 @@ Return the size of object in bytes.");
 static PyObject *
 sys_getrefcount(PyObject *self, PyObject *arg)
 {
-    return PyLong_FromSsize_t(arg->ob_refcnt);
+#if defined(BITPACKED) && (BITPACKED_NOREFCNT)
+    return PyLong_FromSsize_t(BITPACKED_CHECK(arg) ? BITPACKED_DUMMY_REFCNT : Py_REFCNT(arg));
+#else
+    return PyLong_FromSsize_t(Py_REFCNT(arg));
+#endif
 }
 
 #ifdef Py_REF_DEBUG

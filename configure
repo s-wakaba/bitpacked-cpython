@@ -800,6 +800,7 @@ with_suffix
 enable_shared
 enable_profiling
 with_pydebug
+with_bitpacked
 with_hash_algorithm
 with_address_sanitizer
 with_libs
@@ -1479,6 +1480,7 @@ Optional Packages:
                           compiler
   --with-suffix=.exe      set executable suffix
   --with-pydebug          build with Py_DEBUG defined
+  --with-bitpacked        build with memory-packing mode
   --with-hash-algorithm=[fnv|siphash24]
                           select hash algorithm
   --with-address-sanitizer
@@ -6429,6 +6431,33 @@ else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 fi
+
+
+
+# Check for --with-bitpacked
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-bitpacked" >&5
+$as_echo_n "checking for --with-bitpacked... " >&6; }
+
+# Check whether --with-bitpacked was given.
+if test "${with_bitpacked+set}" = set; then :
+  withval=$with_bitpacked;
+if test "$withval" != no
+then
+
+$as_echo "#define BITPACKED 1" >>confdefs.h
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; };
+  BITPACKED='true'
+  ABIFLAGS="${ABIFLAGS}w"
+else { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }; BITPACKED='false'
+fi
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
 
 
 # XXX Shouldn't the code above that fiddles with BASECFLAGS and OPT be
@@ -14354,6 +14383,7 @@ $as_echo "#define AC_APPLE_UNIVERSAL_BUILD 1" >>confdefs.h
 # * --with-pydebug (adds a 'd')
 # * --with-pymalloc (adds a 'm')
 # * --with-wide-unicode (adds a 'u')
+# * --with-bitpacked (adds a 'w')
 #
 # Thus for example, Python 3.2 built with wide unicode, pydebug, and pymalloc,
 # would get a shared library ABI version tag of 'cpython-32dmu' and shared

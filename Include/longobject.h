@@ -4,6 +4,30 @@
 extern "C" {
 #endif
 
+#ifdef BITPACKED
+typedef union{
+    struct{
+#if PY_LITTLE_ENDIAN
+        int reserved;
+        int value;
+#else
+        int value;
+        int reserved;
+#endif
+    };
+    BITPACKED_UWORD uword;
+    PyObject* pyobj;
+    /* rangeobject* rangeobj; */
+} bitpacked_longobject;
+#define BITPACKED_LONG_CHECKEXACT(ob) (BITPACKED_TYPEID(ob) == BITPACKED_TYPEID_LONG)
+/* BITPACKED_LONG_CHECK() accepts bitpacked-bool objects as kind of long objects */
+#define BITPACKED_LONG_CHECK(ob) (((BITPACKED_UWORD)(ob) & 0x000eULL) == (BITPACKED_TYPEID_LONG & 0x000eULL))
+#define BITPACKED_LONG_VALUE(ob) (((bitpacked_longobject*)&(ob))->value)
+#else
+#define BITPACKED_LONG_CHECKEXACT(ob) 0
+#define BITPACKED_LONG_CHECK(ob) 0
+#define BITPACKED_LONG_VALUE(ob) (abort(), 0)
+#endif
 
 /* Long (arbitrary precision) integer object interface */
 
@@ -11,9 +35,10 @@ typedef struct _longobject PyLongObject; /* Revealed in longintrepr.h */
 
 PyAPI_DATA(PyTypeObject) PyLong_Type;
 
-#define PyLong_Check(op) \
-        PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS)
-#define PyLong_CheckExact(op) (Py_TYPE(op) == &PyLong_Type)
+#define PyLong_Check(op) (BITPACKED_LONG_CHECK(op) \
+        || PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS))
+#define PyLong_CheckExact(op) (BITPACKED_LONG_CHECKEXACT(op) \
+        || (Py_TYPE(op) == &PyLong_Type))
 
 PyAPI_FUNC(PyObject *) PyLong_FromLong(long);
 PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLong(unsigned long);

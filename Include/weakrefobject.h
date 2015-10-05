@@ -75,7 +75,8 @@ PyAPI_FUNC(void) _PyWeakref_ClearRef(PyWeakReference *self);
    unreachable.  See issue #16602. */
 
 #define PyWeakref_GET_OBJECT(ref)                           \
-    (Py_REFCNT(((PyWeakReference *)(ref))->wr_object) > 0   \
+    (BITPACKED_CHECK(((PyWeakReference *)(ref))->wr_object) \
+  || Py_REFCNT(((PyWeakReference *)(ref))->wr_object) > 0   \
      ? ((PyWeakReference *)(ref))->wr_object                \
      : Py_None)
 

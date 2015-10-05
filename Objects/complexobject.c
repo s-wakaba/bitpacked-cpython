@@ -325,7 +325,7 @@ PyComplex_AsCComplex(PyObject *op)
 static void
 complex_dealloc(PyObject *op)
 {
-    op->ob_type->tp_free(op);
+    Py_TYPE(op)->tp_free(op);
 }
 
 static PyObject *
@@ -960,9 +960,9 @@ complex_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    nbr = r->ob_type->tp_as_number;
+    nbr = Py_TYPE(r)->tp_as_number;
     if (i != NULL)
-        nbi = i->ob_type->tp_as_number;
+        nbi = Py_TYPE(i)->tp_as_number;
     if (nbr == NULL || nbr->nb_float == NULL ||
         ((i != NULL) && (nbi == NULL || nbi->nb_float == NULL))) {
         PyErr_Format(PyExc_TypeError,

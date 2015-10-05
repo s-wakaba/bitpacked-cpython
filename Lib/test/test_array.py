@@ -999,12 +999,13 @@ class BaseTest:
     @unittest.skipUnless(hasattr(sys, 'getrefcount'),
                          'test needs sys.getrefcount()')
     def test_bug_782369(self):
+        from sysconfig import get_config_vars
         for i in range(10):
             b = array.array('B', range(64))
         rc = sys.getrefcount(10)
         for i in range(10):
             b = array.array('B', range(64))
-        self.assertEqual(rc, sys.getrefcount(10))
+        if not get_config_vars().get('BITPACKED'): self.assertEqual(rc, sys.getrefcount(10))
 
     def test_subclass_with_kwargs(self):
         # SF bug #1486663 -- this used to erroneously raise a TypeError

@@ -189,7 +189,7 @@ PyFunction_SetClosure(PyObject *op, PyObject *closure)
     else {
         PyErr_Format(PyExc_SystemError,
                      "expected tuple for closure, got '%.100s'",
-                     closure->ob_type->tp_name);
+                     Py_TYPE(closure)->tp_name);
         return -1;
     }
     Py_XDECREF(((PyFunctionObject *) op) -> func_closure);
@@ -519,7 +519,7 @@ func_new(PyTypeObject* type, PyObject* args, PyObject* kw)
             if (!PyCell_Check(o)) {
                 return PyErr_Format(PyExc_TypeError,
                     "arg 5 (closure) expected cell, found %s",
-                                    o->ob_type->tp_name);
+                                    Py_TYPE(o)->tp_name);
             }
         }
     }

@@ -18,10 +18,18 @@ typedef struct {
 } PyFloatObject;
 #endif
 
+#ifdef BITPACKED
+#define BITPACKED_FLOAT_CHECK(ob) (((BITPACKED_UWORD)(ob) & 0x000eULL) == (BITPACKED_TYPEID_FLOAT & 0x000eULL))
+#else
+#define BITPACKED_FLOAT_CHECK(ob) 0
+#endif
+
 PyAPI_DATA(PyTypeObject) PyFloat_Type;
 
-#define PyFloat_Check(op) PyObject_TypeCheck(op, &PyFloat_Type)
-#define PyFloat_CheckExact(op) (Py_TYPE(op) == &PyFloat_Type)
+#define PyFloat_Check(op) (BITPACKED_FLOAT_CHECK(op) \
+    || PyObject_TypeCheck(op, &PyFloat_Type))
+#define PyFloat_CheckExact(op) (BITPACKED_FLOAT_CHECK(op) \
+    || (Py_TYPE(op) == &PyFloat_Type))
 
 #ifdef Py_NAN
 #define Py_RETURN_NAN return PyFloat_FromDouble(Py_NAN)
@@ -48,7 +56,14 @@ PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
    speed. */
 PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
 #ifndef Py_LIMITED_API
+#ifdef BITPACKED
+PyAPI_FUNC(double) _bitpacked_float_as_double(void*);
+#define PyFloat_AS_DOUBLE(op) (BITPACKED_CHECK(op) \
+                              ?_bitpacked_float_as_double(op) \
+                              :((PyFloatObject *)(op))->ob_fval)
+#else
 #define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
+#endif
 #endif
 
 #ifndef Py_LIMITED_API
