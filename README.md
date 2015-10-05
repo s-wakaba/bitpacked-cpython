@@ -13,10 +13,20 @@ Only objects satisfying some conditions can be stored it into alternative 61bit 
 * Immutable
 * Not allowing direct access to inside of object members via C-API (e.g. `str, tuple` and buffer protocol objects like `bytes`)
 
+##Building Interpreter
+This has been tested only for x86_64 POSIX systems.
+Add `--with-bitpacked` option when running `./configure` script and compile.
+```
+$ ./configure --with-bitpacked --prefix=/somewhere/to/install
+$ make
+$ make test
+$ make install
+```
+
 ##Supported Types
 Now, objects of following types allow storeing with the **bitpacked** mode.
 
-* `int` (Not big absolute value)
+* `int` (Not big absolute value, `INT_MIN <= n <= INT_MAX`)
 * `bool`
 * `NoneType`
 * `NotImplementedType`
@@ -27,11 +37,15 @@ Now, objects of following types allow storeing with the **bitpacked** mode.
 Results of `id(bitpacked_obj)` are not indicate memory address but packed data structure.
 ```py
 >>> id(None)
-2
->>> id(3.14159265) % 8
-6
+4
+>>> id(False)
+18
+>>> hex(id(True))
+'0x100000012' # 1<<32+18
+>>> hex(id(0x12345))
+'0x1234500000002'
 >>> '%016x' % id(range(0x1122, 0x3344, 0x55))
-'0067334411225512' # Length(16bit),End(16bit),Start(16bit),Step(8bit),Type-ID
+'006733441122550c' # Length(16bit),End(16bit),Start(16bit),Step(8bit),Type-ID
 ```
 
 Results of `is` operator with the same bit-packed values are True even if values come from different operations.
