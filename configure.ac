@@ -3905,6 +3905,32 @@ else AC_MSG_ERROR([proper usage is --with-libc=STRING])
 fi],
 [AC_MSG_RESULT(default LIBC="$LIBC")])
 
+# check for --with-libgmp=...
+AC_SUBST(LONGOBJECT_O)
+LONGOBJECT_O="longobject.o"
+AC_SUBST(LIBGMP)
+LIBGMP=
+AC_MSG_CHECKING(for --with-libgmp=PATH)
+AC_ARG_WITH(libgmp,
+            AS_HELP_STRING([--with-libgmp=PATH],
+            [The GNU Multiple Precision Arithmetic Library]),
+[
+if test "$withval" = no
+then LIBGMP=
+     AC_MSG_RESULT(force LIBGMP empty)
+else if test "$withval" != yes
+     then LIBGMP="$withval/lib/libgmp.a"
+          BASECPPFLAGS="$BASECPPFLAGS -I$withval/include"
+     else LIBGMP="-lgmp"
+     fi
+     LONGOBJECT_O="longobject_gmp.o"
+     AC_DEFINE(PyLong_GMP_BACKEND, 1, [Enable using Gnu MP library])
+     AC_MSG_RESULT(set LIBGMP="$LIBGMP")
+     AC_CHECK_HEADER([gmp.h], [],
+                     [AC_MSG_ERROR([GMP support requested but headers not available])])
+fi],
+[AC_MSG_RESULT(default LIBGMP="$LIBGMP")])
+
 # **************************************
 # * Check for gcc x64 inline assembler *
 # **************************************

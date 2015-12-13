@@ -201,6 +201,13 @@ PyAPI_FUNC(long) PyOS_strtol(const char *, char **, int);
 /* For use by the gcd function in mathmodule.c */
 PyAPI_FUNC(PyObject *) _PyLong_GCD(PyObject *, PyObject *);
 
+#ifdef PyLong_GMP_BACKEND
+PyAPI_FUNC(void*)
+_PyLong_Export(ssize_t *countp, size_t size, size_t nails, PyLongObject *ob);
+PyAPI_FUNC(PyLongObject*)
+_PyLong_Import(ssize_t count, size_t size, size_t nails, const void *op);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

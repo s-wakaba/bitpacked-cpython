@@ -9,7 +9,9 @@
 #define PY_SSIZE_T_CLEAN
 
 #include "Python.h"
+#ifndef PyLong_GMP_BACKEND
 #include "longintrepr.h"
+#endif
 #include "code.h"
 #include "marshal.h"
 #include "../Modules/hashtable.h"
@@ -196,12 +198,14 @@ w_short_pstring(const char *s, Py_ssize_t n, WFILE *p)
    exactly 2**15. */
 
 #define PyLong_MARSHAL_SHIFT 15
+#ifndef PyLong_GMP_BACKEND
 #define PyLong_MARSHAL_BASE ((short)1 << PyLong_MARSHAL_SHIFT)
 #define PyLong_MARSHAL_MASK (PyLong_MARSHAL_BASE - 1)
 #if PyLong_SHIFT % PyLong_MARSHAL_SHIFT != 0
 #error "PyLong_SHIFT must be a multiple of PyLong_MARSHAL_SHIFT"
 #endif
 #define PyLong_MARSHAL_RATIO (PyLong_SHIFT / PyLong_MARSHAL_SHIFT)
+#endif
 
 #define W_TYPE(t, p) do { \
     w_byte((t) | flag, (p)); \
@@ -210,6 +214,34 @@ w_short_pstring(const char *s, Py_ssize_t n, WFILE *p)
 static void
 w_PyLong(const PyLongObject *ob, char flag, WFILE *p)
 {
+#ifdef PyLong_GMP_BACKEND
+    ssize_t n;
+    unsigned long i;
+    uint16_t *pbuf, *q;
+
+    /* fprintf(stderr, "marshal.w_PyLong()\n"); */
+    W_TYPE(TYPE_LONG, p);
+    if (_PyLong_Sign((PyObject*)ob) == 0) {
+        w_long(0L, p);
+        return;
+    }
+
+    assert(PyLong_MARSHAL_SHIFT == 15);
+    pbuf = (uint16_t*)_PyLong_Export(&n, sizeof(uint16_t),
+                         sizeof(uint16_t) * 8 - PyLong_MARSHAL_SHIFT, (PyLongObject*)ob);
+    if(!pbuf) abort(); /* FIXME */
+    if (n < -SIZE32_MAX || n > SIZE32_MAX) {
+        p->depth--;
+        p->error = WFERR_UNMARSHALLABLE;
+        goto exit_w_PyLong;
+    }
+    w_long(n, p);
+    for(i = Py_ABS(n), q = pbuf; i > 0; --i, ++q) {
+        w_short(*q, p);
+    }
+  exit_w_PyLong:
+    PyObject_Free(pbuf);
+#else
     Py_ssize_t i, j, n, l;
     digit d;
 
@@ -248,6 +280,7 @@ w_PyLong(const PyLongObject *ob, char flag, WFILE *p)
         w_short(d & PyLong_MARSHAL_MASK, p);
         d >>= PyLong_MARSHAL_SHIFT;
     } while (d != 0);
+#endif
 }
 
 static int
@@ -776,6 +809,54 @@ static PyObject *
 r_PyLong(RFILE *p)
 {
     PyLongObject *ob;
+#ifdef PyLong_GMP_BACKEND
+    long n;
+    unsigned long i;
+    uint16_t *pbuf, *q;
+    uint16_t buf8[8];
+
+    /* fprintf(stderr, "marshal.r_PyLong()\n"); */
+    n = r_long(p);
+    if (PyErr_Occurred())
+        return NULL;
+    if (n == 0)
+        /* return (PyObject *)_PyLong_New(0); TODO: Maybe BUG (normally unreached code) */
+        return PyLong_FromLong(0);
+    if (n < -SIZE32_MAX || n > SIZE32_MAX) {
+        PyErr_SetString(PyExc_ValueError,
+                       "bad marshal data (long size out of range)");
+        return NULL;
+    }
+
+    assert(PyLong_MARSHAL_SHIFT == 15);
+    if(Py_ABS(n) > 8)
+        pbuf = (uint16_t*)PyObject_Malloc(sizeof(uint16_t) * Py_ABS(n));
+    else
+        pbuf = buf8;
+    ob = NULL;
+    for(i = Py_ABS(n), q = pbuf; i > 0; --i, ++q) {
+        int md = r_short(p);
+        if (PyErr_Occurred())
+            goto exit_r_PyLong;
+        if ((md < 0) || (md >> PyLong_MARSHAL_SHIFT != 0)){
+            PyErr_SetString(PyExc_ValueError,
+                            "bad marshal data (digit out of range in long)");
+            goto exit_r_PyLong;
+        }
+        if (i == 1 && md == 0){
+            PyErr_SetString(PyExc_ValueError,
+                            "bad marshal data (unnormalized long data)");
+            goto exit_r_PyLong;
+        }
+        *q = md;
+    }
+    ob = _PyLong_Import(n, sizeof(uint16_t),
+                     sizeof(uint16_t) * 8 - PyLong_MARSHAL_SHIFT, pbuf);
+  exit_r_PyLong:
+    if(pbuf != buf8)
+        PyObject_Free(pbuf);
+    return (PyObject*)ob;
+#else
     long n, size, i;
     int j, md, shorts_in_top_digit;
     digit d;
@@ -845,6 +926,7 @@ r_PyLong(RFILE *p)
     PyErr_SetString(PyExc_ValueError,
                     "bad marshal data (digit out of range in long)");
     return NULL;
+#endif
 }
 
 /* allocate the reflist index for a new object. Return -1 on failure */

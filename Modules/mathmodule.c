@@ -1681,7 +1681,11 @@ loghelper(PyObject* arg, double (*func)(double), char *funcname)
         Py_ssize_t e;
 
         /* Negative or zero inputs give a ValueError. */
+#ifdef PyLong_GMP_BACKEND
+        if (_PyLong_Sign(arg) <= 0) {
+#else
         if (Py_SIZE(arg) <= 0) {
+#endif
             PyErr_SetString(PyExc_ValueError,
                             "math domain error");
             return NULL;

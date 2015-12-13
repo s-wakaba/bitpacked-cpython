@@ -5,6 +5,12 @@
 extern "C" {
 #endif
 
+#ifdef PyLong_GMP_BACKEND
+
+#include <gmp.h>
+typedef mp_limb_t digit;
+
+#else
 
 /* This is published for the benefit of "friends" marshal.c and _decimal.c. */
 
@@ -85,6 +91,8 @@ typedef long stwodigits; /* signed variant of twodigits */
    CAUTION:  Generic code manipulating subtypes of PyVarObject has to
    aware that ints abuse  ob_size's sign bit.
 */
+
+#endif
 
 struct _longobject {
 	PyObject_VAR_HEAD
