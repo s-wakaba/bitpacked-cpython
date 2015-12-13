@@ -630,6 +630,8 @@ LIBPL
 PY_ENABLE_SHARED
 EXT_SUFFIX
 SOABI
+LIBGMP
+LONGOBJECT_O
 LIBC
 LIBM
 HAVE_GETHOSTBYNAME
@@ -821,6 +823,7 @@ with_valgrind
 with_fpectl
 with_libm
 with_libc
+with_libgmp
 enable_big_digits
 with_computed_gotos
 with_ensurepip
@@ -1509,6 +1512,7 @@ Optional Packages:
   --with-fpectl           enable SIGFPE catching
   --with-libm=STRING      math library
   --with-libc=STRING      C library
+  --with-libgmp=PATH      The GNU Multiple Precision Arithmetic Library
   --with(out)-computed-gotos
                           Use computed gotos in evaluation loop (enabled by
                           default on supported compilers)
@@ -13375,6 +13379,47 @@ fi
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: default LIBC=\"$LIBC\"" >&5
 $as_echo "default LIBC=\"$LIBC\"" >&6; }
+fi
+
+
+# check for --with-libgmp=...
+
+LONGOBJECT_O="longobject.o"
+
+LIBGMP=
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-libgmp=PATH" >&5
+$as_echo_n "checking for --with-libgmp=PATH... " >&6; }
+
+# Check whether --with-libgmp was given.
+if test "${with_libgmp+set}" = set; then :
+  withval=$with_libgmp;
+if test "$withval" = no
+then LIBGMP=
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: force LIBGMP empty" >&5
+$as_echo "force LIBGMP empty" >&6; }
+else if test "$withval" != yes
+     then LIBGMP="$withval/lib/libgmp.a"
+          BASECPPFLAGS="$BASECPPFLAGS -I$withval/include"
+     else LIBGMP="-lgmp"
+     fi
+     LONGOBJECT_O="longobject_gmp.o"
+
+$as_echo "#define PyLong_GMP_BACKEND 1" >>confdefs.h
+
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: set LIBGMP=\"$LIBGMP\"" >&5
+$as_echo "set LIBGMP=\"$LIBGMP\"" >&6; }
+     ac_fn_c_check_header_mongrel "$LINENO" "gmp.h" "ac_cv_header_gmp_h" "$ac_includes_default"
+if test "x$ac_cv_header_gmp_h" = xyes; then :
+
+else
+  as_fn_error $? "GMP support requested but headers not available" "$LINENO" 5
+fi
+
+
+fi
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: default LIBGMP=\"$LIBGMP\"" >&5
+$as_echo "default LIBGMP=\"$LIBGMP\"" >&6; }
 fi
 
 
