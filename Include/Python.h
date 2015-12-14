@@ -76,7 +76,9 @@
 #include "bytesobject.h"
 #include "unicodeobject.h"
 #include "longobject.h"
+#ifndef PyLong_GMP_BACKEND
 #include "longintrepr.h"
+#endif
 #include "boolobject.h"
 #include "floatobject.h"
 #include "complexobject.h"

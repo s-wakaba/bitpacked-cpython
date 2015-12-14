@@ -208,7 +208,8 @@ INSTSONAME=	@INSTSONAME@
 LIBS=		@LIBS@
 LIBM=		@LIBM@
 LIBC=		@LIBC@
-SYSLIBS=	$(LIBM) $(LIBC)
+LIBGMP=		@LIBGMP@
+SYSLIBS=	$(LIBM) $(LIBC) $(LIBGMP)
 SHLIBS=		@SHLIBS@
 
 THREADOBJ=	@THREADOBJ@
@@ -439,7 +440,7 @@ OBJECT_OBJS=	\
 		Objects/funcobject.o \
 		Objects/iterobject.o \
 		Objects/listobject.o \
-		Objects/longobject.o \
+		Objects/@LONGOBJECT_O@ \
 		Objects/dictobject.o \
 		Objects/odictobject.o \
 		Objects/memoryobject.o \

@@ -3,7 +3,9 @@
 #include "Python.h"
 #include <ctype.h>
 #include "structmember.h" /* we need the offsetof() macro from there */
+#ifndef PyLong_GMP_BACKEND
 #include "longintrepr.h"
+#endif
 
 
 

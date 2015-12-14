@@ -2104,7 +2104,11 @@ _tkinter_tkapp_getboolean(TkappObject *self, PyObject *arg)
     int v;
 
     if (PyLong_Check(arg)) { /* int or bool */
+#ifdef PyLong_GMP_BACKEND
+        return PyBool_FromLong(_PyLong_Sign(arg) != 0);
+#else
         return PyBool_FromLong(Py_SIZE(arg) != 0);
+#endif
     }
 
     if (PyTclObject_Check(arg)) {

@@ -27,7 +27,9 @@
 
 
 #include <Python.h>
+#ifndef PyLong_GMP_BACKEND
 #include "longintrepr.h"
+#endif
 #include "pythread.h"
 #include "structmember.h"
 #include "complexobject.h"
@@ -43,6 +45,16 @@
   #error "libmpdec version >= 2.4.1 required"
 #endif
 
+#ifdef PyLong_GMP_BACKEND
+#if PYLONG_BITS_IN_DIGIT == 30
+typedef uint32_t digit;
+#elif PYLONG_BITS_IN_DIGIT == 15
+typedef uint16_t digit;
+#else
+  #error "PYLONG_BITS_IN_DIGIT should be 15 or 30"
+#endif
+#define PyLong_BASE ((digit)1 << PYLONG_BITS_IN_DIGIT)
+#endif
 
 /*
  * Type sizes with assertions in mpdecimal.h and pyport.h:
@@ -2113,7 +2125,11 @@ dec_from_long(PyTypeObject *type, const PyObject *v,
               const mpd_context_t *ctx, uint32_t *status)
 {
     PyObject *dec;
+#ifdef PyLong_GMP_BACKEND
+    struct {digit *ob_digit} l[1];
+#else
     PyLongObject *l = (PyLongObject *)v;
+#endif
     Py_ssize_t ob_size;
     size_t len;
     uint8_t sign;
@@ -2123,11 +2139,20 @@ dec_from_long(PyTypeObject *type, const PyObject *v,
         return NULL;
     }
 
+#ifdef PyLong_GMP_BACKEND
+    if (_PyLong_Sign(v) == 0) {
+        _dec_settriple(dec, MPD_POS, 0, 0);
+        return dec;
+    }
+    l->ob_digit = _PyLong_Export(&ob_size, sizeof(digit), sizeof(digit)*8-PYLONG_BITS_IN_DIGIT, (PyLongObject*)v);
+    if(!l->ob_digit) abort(); /* FIXME check memory allocation error */
+#else
     ob_size = Py_SIZE(l);
     if (ob_size == 0) {
         _dec_settriple(dec, MPD_POS, 0, 0);
         return dec;
     }
+#endif
 
     if (ob_size < 0) {
         len = -ob_size;
@@ -2141,6 +2166,9 @@ dec_from_long(PyTypeObject *type, const PyObject *v,
     if (len == 1) {
         _dec_settriple(dec, sign, *l->ob_digit, 0);
         mpd_qfinalize(MPD(dec), ctx, status);
+#ifdef PyLong_GMP_BACKEND
+        PyObject_Free(l->ob_digit);
+#endif
         return dec;
     }
 
@@ -2154,6 +2182,9 @@ dec_from_long(PyTypeObject *type, const PyObject *v,
   #error "PYLONG_BITS_IN_DIGIT should be 15 or 30"
 #endif
 
+#ifdef PyLong_GMP_BACKEND
+    PyObject_Free(l->ob_digit);
+#endif
     return dec;
 }
 
@@ -3356,6 +3387,11 @@ dec_as_long(PyObject *dec, PyObject *context, int round)
     }
 
     assert(n > 0);
+#ifdef PyLong_GMP_BACKEND
+    pylong = _PyLong_Import(mpd_isnegative(x) ? -n : n, sizeof(digit),
+                     sizeof(digit) * 8 - PYLONG_BITS_IN_DIGIT, ob_digit);
+    mpd_free(ob_digit);
+#else
     pylong = _PyLong_New(n);
     if (pylong == NULL) {
         mpd_free(ob_digit);
@@ -3375,6 +3411,7 @@ dec_as_long(PyObject *dec, PyObject *context, int round)
     if (mpd_isnegative(x) && !mpd_iszero(x)) {
         Py_SIZE(pylong) = -i;
     }
+#endif
 
     mpd_del(x);
     return (PyObject *) pylong;

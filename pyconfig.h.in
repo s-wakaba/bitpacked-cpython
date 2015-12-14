@@ -1229,6 +1229,9 @@
 /* Define to printf format modifier for Py_ssize_t */
 #undef PY_FORMAT_SIZE_T
 
+/* Enable using Gnu MP library */
+#undef PyLong_GMP_BACKEND
+
 /* Define if you want to build an interpreter with many run-time checks. */
 #undef Py_DEBUG
 
