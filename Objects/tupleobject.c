@@ -151,7 +151,7 @@ PyTuple_SetItem(PyObject *op, Py_ssize_t i, PyObject *newitem)
 {
     PyObject *olditem;
     PyObject **p;
-    if (!PyTuple_Check(op) || op->ob_refcnt != 1) {
+    if (!PyTuple_Check(op) || Py_REFCNT(op) != 1) {
         Py_XDECREF(newitem);
         PyErr_BadInternalCall();
         return -1;

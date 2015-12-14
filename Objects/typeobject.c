@@ -1105,7 +1105,7 @@ subtype_dealloc(PyObject *self)
         }
         if (type->tp_del) {
             type->tp_del(self);
-            if (self->ob_refcnt > 0)
+            if (Py_REFCNT(self) > 0)
                 return;
         }
 
@@ -1173,7 +1173,7 @@ subtype_dealloc(PyObject *self)
 
     if (type->tp_del) {
         type->tp_del(self);
-        if (self->ob_refcnt > 0) {
+        if (Py_REFCNT(self) > 0) {
             /* Resurrected */
             goto endlabel;
         }
@@ -2938,7 +2938,7 @@ type_getattro(PyTypeObject *type, PyObject *name)
     if (!PyUnicode_Check(name)) {
         PyErr_Format(PyExc_TypeError,
                      "attribute name must be string, not '%.200s'",
-                     name->ob_type->tp_name);
+                     Py_TYPE(name)->tp_name);
         return NULL;
     }
 
@@ -3522,12 +3522,12 @@ object_richcompare(PyObject *self, PyObject *other, int op)
     case Py_NE:
         /* By default, __ne__() delegates to __eq__() and inverts the result,
            unless the latter returns NotImplemented. */
-        if (self->ob_type->tp_richcompare == NULL) {
+        if (Py_TYPE(self)->tp_richcompare == NULL) {
             res = Py_NotImplemented;
             Py_INCREF(res);
             break;
         }
-        res = (*self->ob_type->tp_richcompare)(self, other, Py_EQ);
+        res = (*Py_TYPE(self)->tp_richcompare)(self, other, Py_EQ);
         if (res != NULL && res != Py_NotImplemented) {
             int ok = PyObject_IsTrue(res);
             Py_DECREF(res);
@@ -4347,10 +4347,10 @@ object_sizeof(PyObject *self, PyObject *args)
     Py_ssize_t res, isize;
 
     res = 0;
-    isize = self->ob_type->tp_itemsize;
+    isize = Py_TYPE(self)->tp_itemsize;
     if (isize > 0)
         res = Py_SIZE(self) * isize;
-    res += self->ob_type->tp_basicsize;
+    res += Py_TYPE(self)->tp_basicsize;
 
     return PyLong_FromSsize_t(res);
 }

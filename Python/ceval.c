@@ -2620,7 +2620,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                                     "must be a mapping, not %.200s",
                                     PyEval_GetFuncName(func),
                                     PyEval_GetFuncDesc(func),
-                                    arg->ob_type->tp_name);
+                                    Py_TYPE(arg)->tp_name);
                         }
                         Py_DECREF(sum);
                         goto error;
@@ -2656,7 +2656,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                     if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
                         PyErr_Format(PyExc_TypeError,
                                 "'%.200s' object is not a mapping",
-                                arg->ob_type->tp_name);
+                                Py_TYPE(arg)->tp_name);
                     }
                     Py_DECREF(sum);
                     goto error;
@@ -2959,7 +2959,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         TARGET(FOR_ITER) {
             /* before: [iter]; after: [iter, iter()] *or* [] */
             PyObject *iter = TOP();
-            PyObject *next = (*iter->ob_type->tp_iternext)(iter);
+            PyObject *next = (*Py_TYPE(iter)->tp_iternext)(iter);
             if (next != NULL) {
                 PUSH(next);
                 PREDICT(STORE_FAST);
@@ -4543,7 +4543,7 @@ PyEval_GetFuncName(PyObject *func)
     else if (PyCFunction_Check(func))
         return ((PyCFunctionObject*)func)->m_ml->ml_name;
     else
-        return func->ob_type->tp_name;
+        return Py_TYPE(func)->tp_name;
 }
 
 const char *
@@ -4921,7 +4921,7 @@ ext_do_call(PyObject *func, PyObject ***pp_stack, int flags, int na, int nk)
                                  "must be a mapping, not %.200s",
                                  PyEval_GetFuncName(func),
                                  PyEval_GetFuncDesc(func),
-                                 kwdict->ob_type->tp_name);
+                                 Py_TYPE(kwdict)->tp_name);
                 }
                 goto ext_call_fail;
             }
@@ -4947,7 +4947,7 @@ ext_do_call(PyObject *func, PyObject ***pp_stack, int flags, int na, int nk)
                                  "must be a sequence, not %.200s",
                                  PyEval_GetFuncName(func),
                                  PyEval_GetFuncDesc(func),
-                                 stararg->ob_type->tp_name);
+                                 Py_TYPE(stararg)->tp_name);
                 }
                 goto ext_call_fail;
             }

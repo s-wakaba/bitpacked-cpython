@@ -1402,7 +1402,7 @@ idna_converter(PyObject *obj, struct maybe_idna *data)
         obj2 = PyUnicode_FromObject(obj);
         if (!obj2) {
             PyErr_Format(PyExc_TypeError, "string or unicode text buffer expected, not %s",
-                         obj->ob_type->tp_name);
+                         Py_TYPE(obj)->tp_name);
             return 0;
         }
         obj3 = PyUnicode_AsEncodedString(obj2, "idna", NULL);

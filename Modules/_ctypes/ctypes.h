@@ -70,7 +70,7 @@ typedef struct {
     ffi_type *atypes[1];
 } CThunkObject;
 extern PyTypeObject PyCThunk_Type;
-#define CThunk_CheckExact(v)        ((v)->ob_type == &PyCThunk_Type)
+#define CThunk_CheckExact(v)        (Py_TYPE(v) == &PyCThunk_Type)
 
 typedef struct {
     /* First part identical to tagCDataObject */
@@ -104,7 +104,7 @@ typedef struct {
 } PyCFuncPtrObject;
 
 extern PyTypeObject PyCStgDict_Type;
-#define PyCStgDict_CheckExact(v)            ((v)->ob_type == &PyCStgDict_Type)
+#define PyCStgDict_CheckExact(v)            (Py_TYPE(v) == &PyCStgDict_Type)
 #define PyCStgDict_Check(v)         PyObject_TypeCheck(v, &PyCStgDict_Type)
 
 extern int PyCStructUnionType_update_stgdict(PyObject *fields, PyObject *type, int isStruct);
@@ -316,7 +316,7 @@ struct tagPyCArgObject {
 };
 
 extern PyTypeObject PyCArg_Type;
-#define PyCArg_CheckExact(v)        ((v)->ob_type == &PyCArg_Type)
+#define PyCArg_CheckExact(v)        (Py_TYPE(v) == &PyCArg_Type)
 extern PyCArgObject *PyCArgObject_new(void);
 
 extern PyObject *

@@ -510,7 +510,7 @@ class Obj2ModVisitor(PickleVisitor):
         if field.seq:
             self.emit("if (!PyList_Check(tmp)) {", depth+1)
             self.emit("PyErr_Format(PyExc_TypeError, \"%s field \\\"%s\\\" must "
-                      "be a list, not a %%.200s\", tmp->ob_type->tp_name);" %
+                      "be a list, not a %%.200s\", Py_TYPE(tmp)->tp_name);" %
                       (name, field.name),
                       depth+2, reflow=False)
             self.emit("goto failed;", depth+2)

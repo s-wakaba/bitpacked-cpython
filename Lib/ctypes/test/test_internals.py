@@ -19,10 +19,11 @@ class ObjectsTestCase(unittest.TestCase):
         self.assertEqual(id(a), id(b))
 
     def test_ints(self):
+        from sysconfig import get_config_vars
         i = 42000123
         refcnt = grc(i)
         ci = c_int(i)
-        self.assertEqual(refcnt, grc(i))
+        if not get_config_vars().get('BITPACKED'): self.assertEqual(refcnt, grc(i))
         self.assertEqual(ci._objects, None)
 
     def test_c_char_p(self):

@@ -21,6 +21,23 @@
 static int numfree = 0;
 static PyFloatObject *free_list = NULL;
 
+#ifdef BITPACKED
+#define BP_C00000  0xC000000000000000ULL
+#define BP_200000  0x2000000000000000ULL
+#define BP_3FFFF0  0x3FFFFFFFFFFFFFF0ULL
+#define BP_3E0000  0x3E00000000000000ULL
+#define BP_3C0000  0x3E00000000000000ULL
+#define BP_03FFFF  0x03FFFFFFFFFFFFFFULL
+#define BP_000000  0x0000000000000000ULL
+#define BP_SHIFT  4
+double _bitpacked_float_as_double(void *op){
+    BITPACKED_UWORD x = (BITPACKED_UWORD)op;
+    x = (x & BP_C00000) | ((x & BP_200000) ? BP_3C0000 : BP_000000)
+        | ((x>>BP_SHIFT) & BP_03FFFF);
+    return *((double*)(&x));
+}
+#endif
+
 double
 PyFloat_GetMax(void)
 {
@@ -109,7 +126,17 @@ PyFloat_GetInfo(void)
 PyObject *
 PyFloat_FromDouble(double fval)
 {
-    PyFloatObject *op = free_list;
+    PyFloatObject *op;
+#ifdef BITPACKED
+    BITPACKED_UWORD x = *((BITPACKED_UWORD*)(&fval));
+    if(!isnan(fval) && (((x & BP_3E0000) == BP_3E0000)||((x & BP_3E0000) == BP_000000))){
+        PyObject *op = (PyObject*)((x & BP_C00000)
+            | ((x<<BP_SHIFT) & BP_3FFFF0) | BITPACKED_TYPEID_FLOAT);
+        Py_INCREF(op);
+        return op;
+    }
+#endif
+    op = free_list;
     if (op != NULL) {
         free_list = (PyFloatObject *) Py_TYPE(op);
         numfree--;
@@ -256,6 +283,8 @@ PyFloat_AsDouble(PyObject *op)
 #define CONVERT_TO_DOUBLE(obj, dbl)                     \
     if (PyFloat_Check(obj))                             \
         dbl = PyFloat_AS_DOUBLE(obj);                   \
+    else if (BITPACKED_LONG_CHECK(obj))                 \
+        dbl = (double)BITPACKED_LONG_VALUE(obj);        \
     else if (convert_to_double(&(obj), &(dbl)) < 0)     \
         return obj;
 
@@ -327,7 +356,8 @@ float_richcompare(PyObject *v, PyObject *w, int op)
      */
     if (PyFloat_Check(w))
         j = PyFloat_AS_DOUBLE(w);
-
+    else if (BITPACKED_LONG_CHECK(w))
+        j = (double)BITPACKED_LONG_VALUE(w);
     else if (!Py_IS_FINITE(i)) {
         if (PyLong_Check(w))
             /* If i is an infinity, its magnitude exceeds any
@@ -503,7 +533,7 @@ float_richcompare(PyObject *v, PyObject *w, int op)
 static Py_hash_t
 float_hash(PyFloatObject *v)
 {
-    return _Py_HashDouble(v->ob_fval);
+    return _Py_HashDouble(PyFloat_AS_DOUBLE(v));
 }
 
 static PyObject *
@@ -782,19 +812,19 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
 static PyObject *
 float_neg(PyFloatObject *v)
 {
-    return PyFloat_FromDouble(-v->ob_fval);
+    return PyFloat_FromDouble(-PyFloat_AS_DOUBLE(v));
 }
 
 static PyObject *
 float_abs(PyFloatObject *v)
 {
-    return PyFloat_FromDouble(fabs(v->ob_fval));
+    return PyFloat_FromDouble(fabs(PyFloat_AS_DOUBLE(v)));
 }
 
 static int
 float_bool(PyFloatObject *v)
 {
-    return v->ob_fval != 0.0;
+    return PyFloat_AS_DOUBLE(v) != 0.0;
 }
 
 static PyObject *
@@ -1044,7 +1074,7 @@ float_float(PyObject *v)
     if (PyFloat_CheckExact(v))
         Py_INCREF(v);
     else
-        v = PyFloat_FromDouble(((PyFloatObject *)v)->ob_fval);
+        v = PyFloat_FromDouble(PyFloat_AS_DOUBLE(v));
     return v;
 }
 
@@ -1574,7 +1604,7 @@ float_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_DECREF(tmp);
         return NULL;
     }
-    ((PyFloatObject *)newobj)->ob_fval = ((PyFloatObject *)tmp)->ob_fval;
+    ((PyFloatObject *)newobj)->ob_fval = PyFloat_AS_DOUBLE(tmp);
     Py_DECREF(tmp);
     return newobj;
 }
@@ -1582,7 +1612,7 @@ float_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static PyObject *
 float_getnewargs(PyFloatObject *v)
 {
-    return Py_BuildValue("(d)", v->ob_fval);
+    return Py_BuildValue("(d)", PyFloat_AS_DOUBLE(v));
 }
 
 /* this is for the benefit of the pack/unpack routines below */

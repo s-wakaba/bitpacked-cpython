@@ -381,9 +381,14 @@ void *
 PyObject_Malloc(size_t size)
 {
     /* see PyMem_RawMalloc() */
+    void *result;
     if (size > (size_t)PY_SSIZE_T_MAX)
         return NULL;
-    return _PyObject.malloc(_PyObject.ctx, size);
+    result = _PyObject.malloc(_PyObject.ctx, size);
+#ifdef BITPACKED
+    assert(!BITPACKED_CHECK(result)); //FIXME
+#endif
+    return result;
 }
 
 void *

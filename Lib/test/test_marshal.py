@@ -344,6 +344,7 @@ class InstancingTestCase(unittest.TestCase, HelperMixin):
     dictobj = {"hello":floatobj, "goodbye":floatobj, floatobj:"hello"}
 
     def helper3(self, rsample, recursive=False, simple=False):
+        from sysconfig import get_config_vars
         #we have two instances
         sample = (rsample, rsample)
 
@@ -360,7 +361,7 @@ class InstancingTestCase(unittest.TestCase, HelperMixin):
             s2 = marshal.dumps(sample, 2)
             n2 = CollectObjectIDs(set(), marshal.loads(s2))
             #old format generated more instances
-            self.assertGreater(n2, n0)
+            if not get_config_vars().get('BITPACKED'): self.assertGreater(n2, n0)
 
             #if complex objects are in there, old format is larger
             if not simple:

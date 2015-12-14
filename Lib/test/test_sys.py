@@ -325,6 +325,7 @@ class SysModuleTest(unittest.TestCase):
 
     @test.support.refcount_test
     def test_refcount(self):
+        from sysconfig import get_config_vars
         # n here must be a global in order for this test to pass while
         # tracing with a python function.  Tracing calls PyFrame_FastToLocals
         # which will add a copy of any locals to the frame object, causing
@@ -333,9 +334,9 @@ class SysModuleTest(unittest.TestCase):
         self.assertRaises(TypeError, sys.getrefcount)
         c = sys.getrefcount(None)
         n = None
-        self.assertEqual(sys.getrefcount(None), c+1)
+        if not get_config_vars().get('BITPACKED'): self.assertEqual(sys.getrefcount(None), c+1)
         del n
-        self.assertEqual(sys.getrefcount(None), c)
+        if not get_config_vars().get('BITPACKED'): self.assertEqual(sys.getrefcount(None), c)
         if hasattr(sys, "gettotalrefcount"):
             self.assertIsInstance(sys.gettotalrefcount(), int)
 

@@ -4,6 +4,25 @@
 extern "C" {
 #endif
 
+/*
+ * Modules/_elementtree.c uses lowest bit of PyObject* pointer as an
+ * internal flag,
+ */
+#ifdef BITPACKED
+#ifndef BITPACKED_NOREFCNT
+#define BITPACKED_NOREFCNT       (!defined(Py_DEBUG))
+#endif
+#ifndef BITPACKED_NOERRDETECT
+#define BITPACKED_NOERRDETECT    (!defined(Py_DEBUG))
+#endif
+#if SIZEOF_VOID_P != 8 || SIZEOF_DOUBLE != 8 || SIZEOF_LONG_LONG != 8 || SIZEOF_LONG != 8 || SIZEOF_INT != 4
+#error data sizes are inappropreate
+#endif
+typedef signed long long BITPACKED_SWORD;
+typedef unsigned long long BITPACKED_UWORD;
+#define bitpacked_static_assert(c) do{int n[(c)?1:-1]={0}; if(n[0]) break; }while(0)
+#define BITPACKED_DUMMY_REFCNT 8128
+#endif
 
 /* Object and type object interface */
 
@@ -105,18 +124,71 @@ whose size is determined when the object is allocated.
  */
 typedef struct _object {
     _PyObject_HEAD_EXTRA
+#ifdef BITPACKED
+    Py_ssize_t ob_refcnt_bitpacked;
+    struct _typeobject *ob_type_bitpacked;
+#else
     Py_ssize_t ob_refcnt;
     struct _typeobject *ob_type;
+#endif
 } PyObject;
 
 typedef struct {
+#ifdef BITPACKED
+    PyObject ob_base;
+    Py_ssize_t ob_size_bitpacked; /* Number of items in variable part */
+#else
     PyObject ob_base;
     Py_ssize_t ob_size; /* Number of items in variable part */
+#endif
 } PyVarObject;
 
+#ifdef BITPACKED
+#define BITPACKED_CHECK(ob) (!!((BITPACKED_UWORD)(ob) & 0x0006ULL))
+#define BITPACKED_TYPEID(ob) ((BITPACKED_UWORD)(ob) & 0x001eULL)
+#define BITPACKED_TYPEID_LONG         ((BITPACKED_UWORD)0x0002U)
+#define BITPACKED_TYPEID_NONE         ((BITPACKED_UWORD)0x0004U)
+#define BITPACKED_TYPEID_NOTIMPL      ((BITPACKED_UWORD)0x0006U)
+#define BITPACKED_TYPEID_FLOAT        ((BITPACKED_UWORD)0x000AU)
+#define BITPACKED_TYPEID_RANGE        ((BITPACKED_UWORD)0x000CU)
+#define BITPACKED_TYPEID_NOTUSED_0E   ((BITPACKED_UWORD)0x000EU)
+#define BITPACKED_TYPEID_BOOL         ((BITPACKED_UWORD)0x0012U)
+#define BITPACKED_TYPEID_NOTUSED_14   ((BITPACKED_UWORD)0x0014U)
+#define BITPACKED_TYPEID_NOTUSED_16   ((BITPACKED_UWORD)0x0016U)
+#define BITPACKED_TYPEID_FLOAT_RSV    ((BITPACKED_UWORD)0x001AU)
+#define BITPACKED_TYPEID_NOTUSED_1C   ((BITPACKED_UWORD)0x001CU)
+#define BITPACKED_TYPEID_NOTUSED_1E   ((BITPACKED_UWORD)0x001EU)
+extern struct _typeobject *const bitpacked_types[16];
+#if BITPACKED_NOREFCNT
+#if BITPACKED_NOERRDETECT
+#define Py_REFCNT(ob)  (((PyObject*)(ob))->ob_refcnt_bitpacked)
+#else
+#define Py_REFCNT(ob)  (*(BITPACKED_CHECK(ob)               \
+                        ?(abort(), (Py_ssize_t*)NULL)       \
+                        :&((PyObject*)(ob))->ob_refcnt_bitpacked))
+#endif
+#else
+extern Py_ssize_t bitpacked_refcnt;
+#define Py_REFCNT(ob)  (*(BITPACKED_CHECK(ob)               \
+                        ?(Py_ssize_t*)(&bitpacked_refcnt)   \
+                        :&((PyObject*)(ob))->ob_refcnt_bitpacked))
+#endif
+#define Py_TYPE(ob)    (*(BITPACKED_CHECK(ob)               \
+                        ?(PyTypeObject**)(bitpacked_types+(BITPACKED_TYPEID(ob)>>1)) \
+                        :&((PyObject*)(ob))->ob_type_bitpacked))
+#if BITPACKED_NOERRDETECT
+#define Py_SIZE(ob)    (((PyVarObject*)(ob))->ob_size_bitpacked)
+#else
+#define Py_SIZE(ob)     (*(BITPACKED_CHECK(ob)              \
+                         ?(abort(), (Py_ssize_t*)NULL)      \
+                         :&((PyVarObject*)(ob))->ob_size_bitpacked))
+#endif
+#else
+#define BITPACKED_CHECK(ob) 0
 #define Py_REFCNT(ob)           (((PyObject*)(ob))->ob_refcnt)
 #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
+#endif
 
 /********************* String Literals ****************************************/
 /* This structure helps managing static strings. The basic usage goes like this:
@@ -714,7 +786,7 @@ PyAPI_FUNC(Py_ssize_t) _Py_GetRefTotal(void);
 #define _Py_DEC_REFTOTAL        _Py_RefTotal--
 #define _Py_REF_DEBUG_COMMA     ,
 #define _Py_CHECK_REFCNT(OP)                                    \
-{       if (((PyObject*)OP)->ob_refcnt < 0)                             \
+{       if (Py_REFCNT(OP) < 0)                                  \
                 _Py_NegativeRefcount(__FILE__, __LINE__,        \
                                      (PyObject *)(OP));         \
 }
@@ -774,19 +846,38 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 #endif
 #endif /* !Py_TRACE_REFS */
 
+#if defined(BITPACKED) && (BITPACKED_NOREFCNT)
+#define Py_INCREF(op) (                         \
+    (BITPACKED_CHECK(op)                        \
+    ? BITPACKED_DUMMY_REFCNT                    \
+    : (_Py_INC_REFTOTAL _Py_REF_DEBUG_COMMA     \
+       Py_REFCNT(op)++)))
+
+#define Py_DECREF(op)                                   \
+    do {                                                \
+        PyObject *_py_decref_tmp = (PyObject *)(op);    \
+        if(BITPACKED_CHECK(_py_decref_tmp)) break;      \
+        if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
+        --Py_REFCNT(_py_decref_tmp) != 0)               \
+            _Py_CHECK_REFCNT(_py_decref_tmp)            \
+        else                                            \
+        _Py_Dealloc(_py_decref_tmp);                    \
+    } while (0)
+#else
 #define Py_INCREF(op) (                         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-    ((PyObject *)(op))->ob_refcnt++)
+    Py_REFCNT(op)++)
 
 #define Py_DECREF(op)                                   \
     do {                                                \
         PyObject *_py_decref_tmp = (PyObject *)(op);    \
         if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-        --(_py_decref_tmp)->ob_refcnt != 0)             \
+        --Py_REFCNT(_py_decref_tmp) != 0)               \
             _Py_CHECK_REFCNT(_py_decref_tmp)            \
         else                                            \
         _Py_Dealloc(_py_decref_tmp);                    \
     } while (0)
+#endif
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementations.
@@ -862,8 +953,12 @@ where NULL (nil) is not suitable (since NULL often means 'error').
 
 Don't forget to apply Py_INCREF() when returning this value!!!
 */
+#ifdef BITPACKED
+#define Py_None ((PyObject*)BITPACKED_TYPEID_NONE)
+#else
 PyAPI_DATA(PyObject) _Py_NoneStruct; /* Don't use this directly */
 #define Py_None (&_Py_NoneStruct)
+#endif
 
 /* Macro for returning Py_None from a function */
 #define Py_RETURN_NONE return Py_INCREF(Py_None), Py_None
@@ -872,8 +967,12 @@ PyAPI_DATA(PyObject) _Py_NoneStruct; /* Don't use this directly */
 Py_NotImplemented is a singleton used to signal that an operation is
 not implemented for a given type combination.
 */
+#ifdef BITPACKED
+#define Py_NotImplemented ((PyObject*)BITPACKED_TYPEID_NOTIMPL)
+#else
 PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
 #define Py_NotImplemented (&_Py_NotImplementedStruct)
+#endif
 
 /* Macro for returning Py_NotImplemented from a function */
 #define Py_RETURN_NOTIMPLEMENTED \

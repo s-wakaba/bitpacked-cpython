@@ -517,8 +517,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 #ifndef Py_LIMITED_API
 #define PyObject_CheckBuffer(obj) \
-    (((obj)->ob_type->tp_as_buffer != NULL) &&  \
-     ((obj)->ob_type->tp_as_buffer->bf_getbuffer != NULL))
+    ((Py_TYPE(obj)->tp_as_buffer != NULL) &&  \
+     (Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL))
 
     /* Return 1 if the getbuffer function is available, otherwise
        return 0 */
@@ -621,8 +621,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     is an iterator, this returns itself. */
 
 #define PyIter_Check(obj) \
-    ((obj)->ob_type->tp_iternext != NULL && \
-     (obj)->ob_type->tp_iternext != &_PyObject_NextNotImplemented)
+    (Py_TYPE(obj)->tp_iternext != NULL && \
+     Py_TYPE(obj)->tp_iternext != &_PyObject_NextNotImplemented)
 
      PyAPI_FUNC(PyObject *) PyIter_Next(PyObject *);
      /* Takes an iterator object and calls its tp_iternext slot,
@@ -782,8 +782,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
 #define PyIndex_Check(obj) \
-   ((obj)->ob_type->tp_as_number != NULL && \
-    (obj)->ob_type->tp_as_number->nb_index != NULL)
+   (Py_TYPE(obj)->tp_as_number != NULL && \
+    Py_TYPE(obj)->tp_as_number->nb_index != NULL)
 
      PyAPI_FUNC(PyObject *) PyNumber_Index(PyObject *o);
 

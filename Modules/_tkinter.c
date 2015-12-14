@@ -815,7 +815,7 @@ typedef struct {
 } PyTclObject;
 
 static PyObject *PyTclObject_Type;
-#define PyTclObject_Check(v) ((v)->ob_type == (PyTypeObject *) PyTclObject_Type)
+#define PyTclObject_Check(v) (Py_TYPE(v) == (PyTypeObject *) PyTclObject_Type)
 
 static PyObject *
 newPyTclObject(Tcl_Obj *arg)
@@ -1763,7 +1763,7 @@ varname_converter(PyObject *in, void *_out)
     }
     PyErr_Format(PyExc_TypeError,
                  "must be str, bytes or Tcl_Obj, not %.50s",
-                 in->ob_type->tp_name);
+                 Py_TYPE(in)->tp_name);
     return 0;
 }
 
@@ -2104,7 +2104,7 @@ _tkinter_tkapp_getboolean(TkappObject *self, PyObject *arg)
     int v;
 
     if (PyLong_Check(arg)) { /* int or bool */
-        return PyBool_FromLong(Py_SIZE(arg) != 0);
+        return PyBool_FromLong(_PyLong_Sign(arg) != 0);
     }
 
     if (PyTclObject_Check(arg)) {

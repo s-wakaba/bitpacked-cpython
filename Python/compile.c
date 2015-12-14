@@ -393,7 +393,7 @@ list2dict(PyObject *list)
             return NULL;
         }
         k = PyList_GET_ITEM(list, i);
-        k = PyTuple_Pack(2, k, k->ob_type);
+        k = PyTuple_Pack(2, k, Py_TYPE(k));
         if (k == NULL || PyDict_SetItem(dict, k, v) < 0) {
             Py_XDECREF(k);
             Py_DECREF(v);
@@ -456,7 +456,7 @@ dictbytype(PyObject *src, int scope_type, int flag, Py_ssize_t offset)
                 return NULL;
             }
             i++;
-            tuple = PyTuple_Pack(2, k, k->ob_type);
+            tuple = PyTuple_Pack(2, k, Py_TYPE(k));
             if (!tuple || PyDict_SetItem(dest, tuple, item) < 0) {
                 Py_DECREF(sorted_keys);
                 Py_DECREF(item);
@@ -1110,9 +1110,9 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
          * or -0.0 case from all others, just to avoid the "coercion".
          */
         if (d == 0.0 && copysign(1.0, d) < 0.0)
-            t = PyTuple_Pack(3, o, o->ob_type, Py_None);
+            t = PyTuple_Pack(3, o, Py_TYPE(o), Py_None);
         else
-            t = PyTuple_Pack(2, o, o->ob_type);
+            t = PyTuple_Pack(2, o, Py_TYPE(o));
     }
     else if (PyComplex_Check(o)) {
         Py_complex z;
@@ -1125,21 +1125,21 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
         real_negzero = z.real == 0.0 && copysign(1.0, z.real) < 0.0;
         imag_negzero = z.imag == 0.0 && copysign(1.0, z.imag) < 0.0;
         if (real_negzero && imag_negzero) {
-            t = PyTuple_Pack(5, o, o->ob_type,
+            t = PyTuple_Pack(5, o, Py_TYPE(o),
                              Py_None, Py_None, Py_None);
         }
         else if (imag_negzero) {
-            t = PyTuple_Pack(4, o, o->ob_type, Py_None, Py_None);
+            t = PyTuple_Pack(4, o, Py_TYPE(o), Py_None, Py_None);
         }
         else if (real_negzero) {
-            t = PyTuple_Pack(3, o, o->ob_type, Py_None);
+            t = PyTuple_Pack(3, o, Py_TYPE(o), Py_None);
         }
         else {
-            t = PyTuple_Pack(2, o, o->ob_type);
+            t = PyTuple_Pack(2, o, Py_TYPE(o));
         }
     }
     else {
-        t = PyTuple_Pack(2, o, o->ob_type);
+        t = PyTuple_Pack(2, o, Py_TYPE(o));
     }
     if (t == NULL)
         return -1;
@@ -1454,7 +1454,7 @@ static int
 compiler_lookup_arg(PyObject *dict, PyObject *name)
 {
     PyObject *k, *v;
-    k = PyTuple_Pack(2, name, name->ob_type);
+    k = PyTuple_Pack(2, name, Py_TYPE(name));
     if (k == NULL)
         return -1;
     v = PyDict_GetItem(dict, k);

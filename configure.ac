@@ -1261,6 +1261,22 @@ case $CC in
     ;;
 esac
 
+# Check for --with-bitpacked
+AC_MSG_CHECKING(for --with-bitpacked)
+AC_ARG_WITH(bitpacked, 
+            AS_HELP_STRING([--with-bitpacked], [build with memory-packing mode]),
+[
+if test "$withval" != no
+then 
+  AC_DEFINE(BITPACKED, 1, 
+  [Define if you want to build an interpreter with memory-packing mode.]) 
+  AC_MSG_RESULT(yes); 
+  BITPACKED='true'
+  ABIFLAGS="${ABIFLAGS}w"
+else AC_MSG_RESULT(no); BITPACKED='false'
+fi],
+[AC_MSG_RESULT(no)])
+
 # XXX Shouldn't the code above that fiddles with BASECFLAGS and OPT be
 # merged with this chunk of code?
 
@@ -4349,6 +4365,7 @@ AC_C_BIGENDIAN
 # * --with-pydebug (adds a 'd')
 # * --with-pymalloc (adds a 'm')
 # * --with-wide-unicode (adds a 'u')
+# * --with-bitpacked (adds a 'w')
 #
 # Thus for example, Python 3.2 built with wide unicode, pydebug, and pymalloc,
 # would get a shared library ABI version tag of 'cpython-32dmu' and shared

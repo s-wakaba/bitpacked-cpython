@@ -9,12 +9,97 @@
 #include <ctype.h>
 #include <stddef.h>
 
+#ifdef BITPACKED
+static PyObject * _PyLong_FromLong_conventional(long ival);
+#define BITPACKED_LONG_INPLACE_CONVENTIONAL(ob)   \
+    do if(BITPACKED_LONG_CHECK(ob)) {             \
+        void* bitpacked_temp = (ob);              \
+        (ob) = (void*)_PyLong_FromLong_conventional(BITPACKED_LONG_VALUE(ob)); \
+        Py_DECREF(bitpacked_temp);                \
+    }while(0)
+/* In ASSURE_CONVENTIONAL block, don't reaturn the function.
+ * (Some macros return from outside-functions. Be careful!)
+ * To assure conventioal long for owned objects, Use
+ * BITPACKED_LONG_INPLACE_CONVENTIONAL macro instead.
+ */
+#define BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(x)  \
+    {                                                \
+        void *bitpacked_temp_##x = NULL;             \
+        if(BITPACKED_LONG_CHECK(x)) {                \
+            bitpacked_temp_##x = (x);                \
+            (x) = (void*)_PyLong_FromLong_conventional(BITPACKED_LONG_VALUE(x)); \
+        }                                            \
+        do{
+#define BITPACKED_LONG_ASSURE_CONVENTIONAL_END(x)    \
+        if(0){} }while(0);                           \
+        if(bitpacked_temp_##x){                      \
+            Py_DECREF(x);                            \
+            (x) = bitpacked_temp_##x;                \
+        }                                            \
+    }
+/* In ASSURE_FAST_CONVENTIONAL block, a temporary conventional
+ * long object is made on the stack (NOT heep) if necessary.
+ * Don't leak it out of the block because it will be disposed
+ * when going out of block even if its refcnt is >0.
+ */
+Py_LOCAL_INLINE(void)
+bitpacked_fast_conventional_helper(char *temp1, void *p)
+{
+    void **px = (void**)p;
+    bitpacked_static_assert(PyLong_SHIFT*2 > SIZEOF_INT*8);
+    if(BITPACKED_LONG_CHECK(*px)){
+        long nn = BITPACKED_LONG_VALUE(*px);
+        int size = 0, sign = (nn < 0 ? -1 : 1);
+        Py_TYPE(temp1) = &PyLong_Type;
+        Py_REFCNT(temp1) = BITPACKED_DUMMY_REFCNT;
+        if(sign == -1) nn = -nn;
+        while(nn){
+            ((PyLongObject*)temp1)->ob_digit[size++] = nn & PyLong_MASK;
+            nn >>= PyLong_SHIFT;
+        }
+        Py_SIZE(temp1) = size * sign;
+        *px = temp1;
+    }
+}
+#define BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(x)  \
+    {                                                     \
+        void *bitpacked_temp0_##x = (x);                  \
+        char bitpacked_temp1_##x[sizeof(PyVarObject)+sizeof(digit)*2] = {0};  \
+        bitpacked_fast_conventional_helper(bitpacked_temp1_##x, &(x));  \
+        do{
+#define BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(x)    \
+        if(0){} }while(0);                                \
+        (x) = bitpacked_temp0_##x;                        \
+    }
+#define BITPACKED_LONG_PSEUDOSIZE(ob) (BITPACKED_CHECK(ob)?BITPACKED_LONG_VALUE(ob):Py_SIZE(ob))
+#define BITPACKED_LONG_RETURN(ival) do {         \
+        bitpacked_longobject w_ret;              \
+        w_ret.uword = BITPACKED_TYPEID_LONG;     \
+        w_ret.value = (ival);                    \
+        Py_INCREF(w_ret.pyobj);                  \
+        return (void*)w_ret.pyobj;               \
+    } while(0)
+#define BITPACKED_LONG_RANGE_CHECK(ival) (INT_MIN <= (ival) && (ival) <= INT_MAX)
+#define NSMALLPOSINTS           0
+#define NSMALLNEGINTS           0
+#else
+#define BITPACKED_LONG_INPLACE_CONVENTIONAL(ob) do{}while(0)
+#define BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(x) do{
+#define BITPACKED_LONG_ASSURE_CONVENTIONAL_END(x) if(0){} }while(0);
+#define BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(x) do{
+#define BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(x) if(0){} }while(0);
+#define BITPACKED_LONG_PSEUDOSIZE(ob) Py_SIZE(ob)
+#define BITPACKED_LONG_RETURN(ival) abort()
+#define BITPACKED_LONG_RANGE_CHECK(ival) 0
 #ifndef NSMALLPOSINTS
 #define NSMALLPOSINTS           257
 #endif
 #ifndef NSMALLNEGINTS
 #define NSMALLNEGINTS           5
 #endif
+#endif
+#define BITPACKED_LONG_CHECK2(ob1, ob2) (BITPACKED_LONG_CHECK(ob1) && BITPACKED_LONG_CHECK(ob2))
+#define BITPACKED_CHECK_OR2(ob1, ob2) (BITPACKED_CHECK(ob1) || BITPACKED_CHECK(ob2))
 
 /* convert a PyLong of size 1, 0 or -1 to an sdigit */
 #define MEDIUM_VALUE(x) (assert(-1 <= Py_SIZE(x) && Py_SIZE(x) <= 1),   \
@@ -22,6 +107,27 @@
              (Py_SIZE(x) == 0 ? (sdigit)0 :                             \
               (sdigit)(x)->ob_digit[0]))
 
+#ifdef BITPACKED
+#define CHECK_SMALL_INT(ival) do {               \
+    if (BITPACKED_LONG_RANGE_CHECK(ival))        \
+        BITPACKED_LONG_RETURN(ival);             \
+    } while(0)
+static PyLongObject *
+maybe_small_long(PyLongObject *v)
+{
+#if (PyLong_SHIFT != 30) || (SIZEOF_INT != 4) || (SIZEOF_LONG != 8) || (SIZEOF_VOID_P != 8)
+#error "Bit-Packed datasize error"
+#endif
+    if (v && !BITPACKED_CHECK(v) && Py_ABS(Py_SIZE(v)) <= 1) {
+        sdigit ival = MEDIUM_VALUE(v);
+        if(BITPACKED_LONG_RANGE_CHECK(ival)){
+            Py_DECREF(v);
+            BITPACKED_LONG_RETURN(ival);
+        }
+    }
+    return v;
+}
+#else
 #if NSMALLNEGINTS + NSMALLPOSINTS > 0
 /* Small integers are preallocated in this array so that they
    can be shared.
@@ -69,6 +175,7 @@ maybe_small_long(PyLongObject *v)
 #define CHECK_SMALL_INT(ival)
 #define maybe_small_long(val) (val)
 #endif
+#endif
 
 /* If a freshly-allocated int is already shared, it must
    be a small integer, so negating it must go to PyLong_FromLong */
@@ -78,6 +185,19 @@ _PyLong_Negate(PyLongObject **x_p)
     PyLongObject *x;
 
     x = (PyLongObject *)*x_p;
+#ifdef BITPACKED
+    if(BITPACKED_CHECK(x)){
+        bitpacked_longobject *w = (bitpacked_longobject*)(&x);
+        if(w->value != INT_MIN){
+            w->value = -w->value;
+            *x_p = x;
+        }else{
+            *x_p = (PyLongObject *)_PyLong_FromLong_conventional(-(long)w->value);
+            Py_DECREF(x);
+        }
+        return;
+    }
+#endif
     if (Py_REFCNT(x) == 1) {
         Py_SIZE(x) = -Py_SIZE(x);
         return;
@@ -113,8 +233,11 @@ _PyLong_Negate(PyLongObject **x_p)
 static PyLongObject *
 long_normalize(PyLongObject *v)
 {
-    Py_ssize_t j = Py_ABS(Py_SIZE(v));
-    Py_ssize_t i = j;
+    Py_ssize_t j;
+    Py_ssize_t i;
+    if(BITPACKED_LONG_CHECK(v)){ return v; }
+    j = Py_ABS(Py_SIZE(v));
+    i = j;
 
     while (i > 0 && v->ob_digit[i-1] == 0)
         --i;
@@ -156,7 +279,7 @@ _PyLong_FromNbInt(PyObject *integral)
     if (!PyLong_Check(result)) {
         PyErr_Format(PyExc_TypeError,
                      "__int__ returned non-int (type %.200s)",
-                     result->ob_type->tp_name);
+                     Py_TYPE(result)->tp_name);
         Py_DECREF(result);
         return NULL;
     }
@@ -165,7 +288,7 @@ _PyLong_FromNbInt(PyObject *integral)
             "__int__ returned non-int (type %.200s).  "
             "The ability to return an instance of a strict subclass of int "
             "is deprecated, and may be removed in a future version of Python.",
-            result->ob_type->tp_name)) {
+            Py_TYPE(result)->tp_name)) {
         Py_DECREF(result);
         return NULL;
     }
@@ -208,6 +331,7 @@ _PyLong_Copy(PyLongObject *src)
     PyLongObject *result;
     Py_ssize_t i;
 
+    if(BITPACKED_LONG_CHECK(src)) BITPACKED_LONG_RETURN(BITPACKED_LONG_VALUE(src));
     assert(src != NULL);
     i = Py_SIZE(src);
     if (i < 0)
@@ -229,6 +353,17 @@ _PyLong_Copy(PyLongObject *src)
 
 PyObject *
 PyLong_FromLong(long ival)
+#ifdef BITPACKED
+{
+    bitpacked_static_assert(sizeof(BITPACKED_UWORD) == sizeof(bitpacked_longobject));
+    bitpacked_static_assert(sizeof(long) == 8);
+    CHECK_SMALL_INT(ival);
+    return _PyLong_FromLong_conventional(ival);
+}
+
+static PyObject *
+_PyLong_FromLong_conventional(long ival)
+#endif
 {
     PyLongObject *v;
     unsigned long abs_ival;
@@ -236,7 +371,9 @@ PyLong_FromLong(long ival)
     int ndigits = 0;
     int sign = 1;
 
+#ifndef BITPACKED
     CHECK_SMALL_INT(ival);
+#endif
 
     if (ival < 0) {
         /* negate: can't write this as abs_ival = -ival since that
@@ -245,6 +382,7 @@ PyLong_FromLong(long ival)
         sign = -1;
     }
     else {
+        if(ival == 0) sign = 0; /* TODO: potentially bug of CPython, it should be reported! */
         abs_ival = (unsigned long)ival;
     }
 
@@ -399,6 +537,7 @@ PyLong_AsLongAndOverflow(PyObject *vv, int *overflow)
     int do_decref = 0; /* if nb_int was called */
 
     *overflow = 0;
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return -1;
@@ -409,6 +548,11 @@ PyLong_AsLongAndOverflow(PyObject *vv, int *overflow)
     }
     else {
         v = _PyLong_FromNbInt(vv);
+        if(BITPACKED_LONG_CHECK(v)) {
+            res = BITPACKED_LONG_VALUE(v);
+            Py_DECREF(v);
+            return res;
+        }
         if (v == NULL)
             return -1;
         do_decref = 1;
@@ -470,7 +614,9 @@ long
 PyLong_AsLong(PyObject *obj)
 {
     int overflow;
-    long result = PyLong_AsLongAndOverflow(obj, &overflow);
+    long result;
+    if(BITPACKED_LONG_CHECK(obj)) return BITPACKED_LONG_VALUE(obj);
+    result = PyLong_AsLongAndOverflow(obj, &overflow);
     if (overflow) {
         /* XXX: could be cute and give a different
            message for overflow == -1 */
@@ -487,7 +633,9 @@ int
 _PyLong_AsInt(PyObject *obj)
 {
     int overflow;
-    long result = PyLong_AsLongAndOverflow(obj, &overflow);
+    long result;
+    if(BITPACKED_LONG_CHECK(obj)) return BITPACKED_LONG_VALUE(obj);
+    result = PyLong_AsLongAndOverflow(obj, &overflow);
     if (overflow || result > INT_MAX || result < INT_MIN) {
         /* XXX: could be cute and give a different
            message for overflow == -1 */
@@ -508,6 +656,7 @@ PyLong_AsSsize_t(PyObject *vv) {
     Py_ssize_t i;
     int sign;
 
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return -1;
@@ -563,6 +712,15 @@ PyLong_AsUnsignedLong(PyObject *vv)
     unsigned long x, prev;
     Py_ssize_t i;
 
+    if(BITPACKED_LONG_CHECK(vv)) {
+        long n = BITPACKED_LONG_VALUE(vv);
+        if (n < 0) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "can't convert negative value to unsigned int");
+            return (unsigned long) -1;
+        }
+        return n;
+    }
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return (unsigned long)-1;
@@ -607,6 +765,15 @@ PyLong_AsSize_t(PyObject *vv)
     size_t x, prev;
     Py_ssize_t i;
 
+    if(BITPACKED_LONG_CHECK(vv)) {
+        long n = BITPACKED_LONG_VALUE(vv);
+        if (n < 0) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "can't convert negative value to size_t");
+            return (size_t) -1;
+        }
+        return n;
+    }
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return (size_t) -1;
@@ -651,6 +818,7 @@ _PyLong_AsUnsignedLongMask(PyObject *vv)
     Py_ssize_t i;
     int sign;
 
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL || !PyLong_Check(vv)) {
         PyErr_BadInternalCall();
         return (unsigned long) -1;
@@ -702,6 +870,10 @@ _PyLong_Sign(PyObject *vv)
 {
     PyLongObject *v = (PyLongObject *)vv;
 
+    if(BITPACKED_LONG_CHECK(vv)) {
+        long n = BITPACKED_LONG_VALUE(vv);
+        return n == 0 ? 0 : (n < 0 ? -1 : 1);
+    }
     assert(v != NULL);
     assert(PyLong_Check(v));
 
@@ -715,6 +887,16 @@ _PyLong_NumBits(PyObject *vv)
     size_t result = 0;
     Py_ssize_t ndigits;
 
+    if(BITPACKED_LONG_CHECK(v)) {
+        long n = (long)BITPACKED_LONG_VALUE(v);
+        if(n < 0) n = -n;
+        result = 0;
+        while(n){
+            ++result;
+            n >>= 1;
+        }
+        return result;
+    }
     assert(v != NULL);
     assert(PyLong_Check(v));
     ndigits = Py_ABS(Py_SIZE(v));
@@ -867,6 +1049,7 @@ _PyLong_AsByteArray(PyLongObject* v,
 
     assert(v != NULL && PyLong_Check(v));
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(v)
     if (Py_SIZE(v) < 0) {
         ndigits = -(Py_SIZE(v));
         if (!is_signed) {
@@ -981,6 +1164,7 @@ _PyLong_AsByteArray(PyLongObject* v,
     PyErr_SetString(PyExc_OverflowError, "int too big to convert");
     return -1;
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(v)
 }
 
 /* Create a new int object from a C pointer */
@@ -1198,6 +1382,7 @@ PyLong_AsLongLong(PyObject *vv)
     int res;
     int do_decref = 0; /* if nb_int was called */
 
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return -1;
@@ -1208,6 +1393,11 @@ PyLong_AsLongLong(PyObject *vv)
     }
     else {
         v = _PyLong_FromNbInt(vv);
+        if(BITPACKED_LONG_CHECK(v)){
+            bytes = BITPACKED_LONG_VALUE(v);
+            Py_DECREF(v);
+            return bytes;
+        }
         if (v == NULL)
             return -1;
         do_decref = 1;
@@ -1249,6 +1439,16 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
     unsigned PY_LONG_LONG bytes;
     int res;
 
+    if(BITPACKED_LONG_CHECK(vv)) {
+        long n = BITPACKED_LONG_VALUE(vv);
+        if (n < 0) {
+            /* This error message must be the same with that in _PyLong_AsByteArray() */
+            PyErr_SetString(PyExc_OverflowError,
+                            "can't convert negative int to unsigned");
+            return (unsigned PY_LONG_LONG)-1;
+        }
+        return n;
+    }
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return (unsigned PY_LONG_LONG)-1;
@@ -1285,6 +1485,7 @@ _PyLong_AsUnsignedLongLongMask(PyObject *vv)
     Py_ssize_t i;
     int sign;
 
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL || !PyLong_Check(vv)) {
         PyErr_BadInternalCall();
         return (unsigned long) -1;
@@ -1353,6 +1554,7 @@ PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
     int do_decref = 0; /* if nb_int was called */
 
     *overflow = 0;
+    if(BITPACKED_LONG_CHECK(vv)) return BITPACKED_LONG_VALUE(vv);
     if (vv == NULL) {
         PyErr_BadInternalCall();
         return -1;
@@ -1363,6 +1565,11 @@ PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
     }
     else {
         v = _PyLong_FromNbInt(vv);
+        if(BITPACKED_LONG_CHECK(v)) {
+            res = BITPACKED_LONG_VALUE(v);
+            Py_DECREF(v);
+            return res;
+        }
         if (v == NULL)
             return -1;
         do_decref = 1;
@@ -1564,6 +1771,7 @@ inplace_divrem1(digit *pout, digit *pin, Py_ssize_t size, digit n)
 static PyLongObject *
 divrem1(PyLongObject *a, digit n, digit *prem)
 {
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
     const Py_ssize_t size = Py_ABS(Py_SIZE(a));
     PyLongObject *z;
 
@@ -1573,6 +1781,7 @@ divrem1(PyLongObject *a, digit n, digit *prem)
         return NULL;
     *prem = inplace_divrem1(z->ob_digit, a->ob_digit, size, n);
     return long_normalize(z);
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 /* Convert an integer to a base 10 string.  Returns a new non-shared
@@ -1596,6 +1805,7 @@ long_to_decimal_string_internal(PyObject *aa,
         PyErr_BadInternalCall();
         return -1;
     }
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
     size_a = Py_ABS(Py_SIZE(a));
     negative = Py_SIZE(a) < 0;
 
@@ -1732,12 +1942,14 @@ long_to_decimal_string_internal(PyObject *aa,
         *p_output = (PyObject *)str;
     }
     return 0;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 static PyObject *
 long_to_decimal_string(PyObject *aa)
 {
     PyObject *v;
+    if(BITPACKED_LONG_CHECK(aa)) return PyUnicode_FromFormat("%d", BITPACKED_LONG_VALUE(aa));
     if (long_to_decimal_string_internal(aa, &v, NULL) == -1)
         return NULL;
     return v;
@@ -1765,6 +1977,7 @@ long_format_binary(PyObject *aa, int base, int alternate,
         PyErr_BadInternalCall();
         return -1;
     }
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
     size_a = Py_ABS(Py_SIZE(a));
     negative = Py_SIZE(a) < 0;
 
@@ -1889,6 +2102,7 @@ long_format_binary(PyObject *aa, int base, int alternate,
         *p_output = v;
     }
     return 0;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 PyObject *
@@ -1896,6 +2110,9 @@ _PyLong_Format(PyObject *obj, int base)
 {
     PyObject *str;
     int err;
+#if 0
+    if(base == 10 && BITPACKED_LONG_CHECK(obj)) return PyUnicode_FromFormat("%d", BITPACKED_LONG_VALUE(obj));
+#endif
     if (base == 10)
         err = long_to_decimal_string_internal(obj, &str, NULL);
     else
@@ -2261,6 +2478,7 @@ digit beyond the first.
     }
     if (z == NULL)
         return NULL;
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(z);
     if (error_if_nonzero) {
         /* reset the base to 0, else the exception message
            doesn't make too much sense */
@@ -2425,7 +2643,7 @@ long_divrem(PyLongObject *a, PyLongObject *b,
             return -1;
         }
     }
-    if (Py_SIZE(a) < 0 && Py_SIZE(*prem) != 0) {
+    if (Py_SIZE(a) < 0 && BITPACKED_LONG_PSEUDOSIZE(*prem) != 0) {
         _PyLong_Negate(prem);
         if (*prem == NULL) {
             Py_DECREF(z);
@@ -2451,6 +2669,7 @@ x_divrem(PyLongObject *v1, PyLongObject *w1, PyLongObject **prem)
     sdigit zhi;
     stwodigits z;
 
+    assert(!BITPACKED_CHECK_OR2(v1, w1));
     /* We follow Knuth [The Art of Computer Programming, Vol. 2 (3rd
        edn.), section 4.3.1, Algorithm D], except that we don't explicitly
        handle the special case when the initial estimate q for a quotient
@@ -2590,6 +2809,14 @@ _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e)
        multiple of 4, rounding ties to a multiple of 8. */
     static const int half_even_correction[8] = {0, -1, -2, 1, 0, -1, 2, 1};
 
+#ifdef BITPACKED
+    if(BITPACKED_CHECK(a)) {
+        int exp;
+        double result = frexp((double)BITPACKED_LONG_VALUE(a), &exp);
+        *e = exp;
+        return result;
+    }
+#endif
     a_size = Py_ABS(Py_SIZE(a));
     if (a_size == 0) {
         /* Special case for 0: significand 0.0, exponent 0. */
@@ -2697,6 +2924,7 @@ PyLong_AsDouble(PyObject *v)
     Py_ssize_t exponent;
     double x;
 
+    if(BITPACKED_LONG_CHECK(v)) return BITPACKED_LONG_VALUE(v);
     if (v == NULL) {
         PyErr_BadInternalCall();
         return -1.0;
@@ -2727,6 +2955,12 @@ long_compare(PyLongObject *a, PyLongObject *b)
 {
     Py_ssize_t sign;
 
+    if(BITPACKED_LONG_CHECK2(a, b)) {
+        sign = BITPACKED_LONG_VALUE(a) - BITPACKED_LONG_VALUE(b);
+        return sign < 0 ? -1 : sign > 0 ? 1 : 0;
+    }
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     if (Py_SIZE(a) != Py_SIZE(b)) {
         sign = Py_SIZE(a) - Py_SIZE(b);
     }
@@ -2742,6 +2976,8 @@ long_compare(PyLongObject *a, PyLongObject *b)
                 sign = -sign;
         }
     }
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
     return sign < 0 ? -1 : sign > 0 ? 1 : 0;
 }
 
@@ -2792,6 +3028,11 @@ long_hash(PyLongObject *v)
     Py_uhash_t x;
     Py_ssize_t i;
     int sign;
+
+    if(BITPACKED_CHECK(v)) {
+        long n = BITPACKED_LONG_VALUE(v);
+        return n == -1 ? -2 : n;
+    }
 
     i = Py_SIZE(v);
     switch(i) {
@@ -2849,11 +3090,14 @@ long_hash(PyLongObject *v)
 static PyLongObject *
 x_add(PyLongObject *a, PyLongObject *b)
 {
-    Py_ssize_t size_a = Py_ABS(Py_SIZE(a)), size_b = Py_ABS(Py_SIZE(b));
+    Py_ssize_t size_a, size_b;
     PyLongObject *z;
     Py_ssize_t i;
     digit carry = 0;
 
+    assert(!BITPACKED_CHECK_OR2(a, b));
+    size_a = Py_ABS(Py_SIZE(a));
+    size_b = Py_ABS(Py_SIZE(b));
     /* Ensure a is the larger of the two: */
     if (size_a < size_b) {
         { PyLongObject *temp = a; a = b; b = temp; }
@@ -2883,12 +3127,15 @@ x_add(PyLongObject *a, PyLongObject *b)
 static PyLongObject *
 x_sub(PyLongObject *a, PyLongObject *b)
 {
-    Py_ssize_t size_a = Py_ABS(Py_SIZE(a)), size_b = Py_ABS(Py_SIZE(b));
+    Py_ssize_t size_a, size_b;
     PyLongObject *z;
     Py_ssize_t i;
     int sign = 1;
     digit borrow = 0;
 
+    assert(!BITPACKED_CHECK_OR2(a, b));
+    size_a = Py_ABS(Py_SIZE(a));
+    size_b = Py_ABS(Py_SIZE(b));
     /* Ensure a is the larger of the two: */
     if (size_a < size_b) {
         sign = -1;
@@ -2941,8 +3188,12 @@ long_add(PyLongObject *a, PyLongObject *b)
 {
     PyLongObject *z;
 
+    if(BITPACKED_LONG_CHECK2(a, b))
+        return PyLong_FromLong((long)BITPACKED_LONG_VALUE(a) + (long)BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     if (Py_ABS(Py_SIZE(a)) <= 1 && Py_ABS(Py_SIZE(b)) <= 1) {
         PyObject *result = PyLong_FromLong(MEDIUM_VALUE(a) +
                                           MEDIUM_VALUE(b));
@@ -2951,6 +3202,7 @@ long_add(PyLongObject *a, PyLongObject *b)
     if (Py_SIZE(a) < 0) {
         if (Py_SIZE(b) < 0) {
             z = x_add(a, b);
+            BITPACKED_LONG_INPLACE_CONVENTIONAL(z);
             if (z != NULL && Py_SIZE(z) != 0)
                 Py_SIZE(z) = -(Py_SIZE(z));
         }
@@ -2963,6 +3215,8 @@ long_add(PyLongObject *a, PyLongObject *b)
         else
             z = x_add(a, b);
     }
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
     return (PyObject *)z;
 }
 
@@ -2971,8 +3225,12 @@ long_sub(PyLongObject *a, PyLongObject *b)
 {
     PyLongObject *z;
 
+    if(BITPACKED_LONG_CHECK2(a, b))
+        return PyLong_FromLong((long)BITPACKED_LONG_VALUE(a) - (long)BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     if (Py_ABS(Py_SIZE(a)) <= 1 && Py_ABS(Py_SIZE(b)) <= 1) {
         PyObject* r;
         r = PyLong_FromLong(MEDIUM_VALUE(a)-MEDIUM_VALUE(b));
@@ -2983,6 +3241,7 @@ long_sub(PyLongObject *a, PyLongObject *b)
             z = x_sub(a, b);
         else
             z = x_add(a, b);
+        BITPACKED_LONG_INPLACE_CONVENTIONAL(z);
         if (z != NULL && Py_SIZE(z) != 0)
             Py_SIZE(z) = -(Py_SIZE(z));
     }
@@ -2993,6 +3252,8 @@ long_sub(PyLongObject *a, PyLongObject *b)
             z = x_sub(a, b);
     }
     return (PyObject *)z;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 /* Grade school multiplication, ignoring the signs.
@@ -3002,10 +3263,13 @@ static PyLongObject *
 x_mul(PyLongObject *a, PyLongObject *b)
 {
     PyLongObject *z;
-    Py_ssize_t size_a = Py_ABS(Py_SIZE(a));
-    Py_ssize_t size_b = Py_ABS(Py_SIZE(b));
+    Py_ssize_t size_a;
+    Py_ssize_t size_b;
     Py_ssize_t i;
 
+    assert(!BITPACKED_CHECK_OR2(a, b));
+    size_a = Py_ABS(Py_SIZE(a));
+    size_b = Py_ABS(Py_SIZE(b));
     z = _PyLong_New(size_a + size_b);
     if (z == NULL)
         return NULL;
@@ -3126,8 +3390,7 @@ static PyLongObject *k_lopsided_mul(PyLongObject *a, PyLongObject *b);
 static PyLongObject *
 k_mul(PyLongObject *a, PyLongObject *b)
 {
-    Py_ssize_t asize = Py_ABS(Py_SIZE(a));
-    Py_ssize_t bsize = Py_ABS(Py_SIZE(b));
+    Py_ssize_t asize, bsize;
     PyLongObject *ah = NULL;
     PyLongObject *al = NULL;
     PyLongObject *bh = NULL;
@@ -3145,6 +3408,9 @@ k_mul(PyLongObject *a, PyLongObject *b)
      * been reduced to 3 multiplies on numbers half the size.
      */
 
+    assert(!BITPACKED_CHECK_OR2(a, b));
+    asize = Py_ABS(Py_SIZE(a));
+    bsize = Py_ABS(Py_SIZE(b));
     /* We want to split based on the larger number; fiddle so that b
      * is largest.
      */
@@ -3162,6 +3428,7 @@ k_mul(PyLongObject *a, PyLongObject *b)
     i = a == b ? KARATSUBA_SQUARE_CUTOFF : KARATSUBA_CUTOFF;
     if (asize <= i) {
         if (asize == 0)
+            /* object a is possibly on-stack object. don't return it */
             return (PyLongObject *)PyLong_FromLong(0);
         else
             return x_mul(a, b);
@@ -3215,6 +3482,7 @@ k_mul(PyLongObject *a, PyLongObject *b)
 
     /* 2. t1 <- ah*bh, and copy into high digits of result. */
     if ((t1 = k_mul(ah, bh)) == NULL) goto fail;
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(t1);
     assert(Py_SIZE(t1) >= 0);
     assert(2*shift + Py_SIZE(t1) <= Py_SIZE(ret));
     memcpy(ret->ob_digit + 2*shift, t1->ob_digit,
@@ -3231,6 +3499,7 @@ k_mul(PyLongObject *a, PyLongObject *b)
         Py_DECREF(t1);
         goto fail;
     }
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(t2);
     assert(Py_SIZE(t2) >= 0);
     assert(Py_SIZE(t2) <= 2*shift); /* no overlap with high digits */
     memcpy(ret->ob_digit, t2->ob_digit, Py_SIZE(t2) * sizeof(digit));
@@ -3269,6 +3538,7 @@ k_mul(PyLongObject *a, PyLongObject *b)
     bh = bl = NULL;
 
     t3 = k_mul(t1, t2);
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(t3);
     Py_DECREF(t1);
     Py_DECREF(t2);
     if (t3 == NULL) goto fail;
@@ -3403,8 +3673,12 @@ long_mul(PyLongObject *a, PyLongObject *b)
 {
     PyLongObject *z;
 
+    if(BITPACKED_LONG_CHECK2(a, b))
+        return PyLong_FromLong((long)BITPACKED_LONG_VALUE(a) * (long)BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     /* fast path for single-digit multiplication */
     if (Py_ABS(Py_SIZE(a)) <= 1 && Py_ABS(Py_SIZE(b)) <= 1) {
         stwodigits v = (stwodigits)(MEDIUM_VALUE(a)) * MEDIUM_VALUE(b);
@@ -3429,6 +3703,8 @@ long_mul(PyLongObject *a, PyLongObject *b)
             return NULL;
     }
     return (PyObject *)z;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 /* The / and % operators are now defined in terms of divmod().
@@ -3458,8 +3734,10 @@ l_divmod(PyLongObject *v, PyLongObject *w,
 {
     PyLongObject *div, *mod;
 
+    assert(!BITPACKED_CHECK_OR2(v, w));
     if (long_divrem(v, w, &div, &mod) < 0)
         return -1;
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(mod);
     if ((Py_SIZE(mod) < 0 && Py_SIZE(w) > 0) ||
         (Py_SIZE(mod) > 0 && Py_SIZE(w) < 0)) {
         PyLongObject *temp;
@@ -3496,14 +3774,47 @@ l_divmod(PyLongObject *v, PyLongObject *w,
     return 0;
 }
 
+#ifdef BITPACKED
+Py_LOCAL_INLINE(int)
+bitpacked_l_divmod(PyObject *a, PyObject *b, long *div, long *mod)
+{
+    long na = BITPACKED_LONG_VALUE(a);
+    long nb = BITPACKED_LONG_VALUE(b);
+    if(nb == 0){
+        PyErr_SetString(PyExc_ZeroDivisionError,
+                        "integer division or modulo by zero");
+        return 0;
+    }
+    *div = na / nb;
+    *mod = na % nb;
+    if((*mod < 0  && nb > 0  )||(*mod > 0  && nb < 0  )){
+        *div -= 1;
+        *mod += nb;
+    }
+    return 1;
+}
+#endif
+
 static PyObject *
 long_div(PyObject *a, PyObject *b)
 {
     PyLongObject *div;
 
+#ifdef BITPACKED
+    if(BITPACKED_LONG_CHECK2(a, b)) {
+        long div, mod;
+        /* when a, b == INT_MIN, -1, div is INT_MAX+1 */
+        if(bitpacked_l_divmod(a, b, &div, &mod)) return PyLong_FromLong(div);
+        return NULL;
+    }
+#endif
     CHECK_BINOP(a, b);
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(b)
     if (l_divmod((PyLongObject*)a, (PyLongObject*)b, &div, NULL) < 0)
         div = NULL;
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(a)
     return (PyObject *)div;
 }
 
@@ -3521,9 +3832,19 @@ long_true_divide(PyObject *v, PyObject *w)
     int inexact, negate, a_is_small, b_is_small;
     double dx, result;
 
+    if(BITPACKED_LONG_CHECK2(v, w)){
+        if(BITPACKED_LONG_VALUE(w) == 0) {
+            PyErr_SetString(PyExc_ZeroDivisionError,
+                            "division by zero");
+            return NULL;
+        }
+        return PyFloat_FromDouble((double)BITPACKED_LONG_VALUE(v) / (double)BITPACKED_LONG_VALUE(w));
+    }
     CHECK_BINOP(v, w);
     a = (PyLongObject *)v;
     b = (PyLongObject *)w;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
 
     /*
        Method in a nutshell:
@@ -3726,10 +4047,11 @@ long_true_divide(PyObject *v, PyObject *w)
         x = div;
         if (x == NULL)
             goto error;
-        if (Py_SIZE(rem))
+        if (BITPACKED_LONG_PSEUDOSIZE(rem))
             inexact = 1;
         Py_DECREF(rem);
     }
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(x);
     x_size = Py_ABS(Py_SIZE(x));
     assert(x_size > 0); /* result of division is never zero */
     x_bits = (x_size-1)*PyLong_SHIFT+bits_in_digit(x->ob_digit[x_size-1]);
@@ -3768,6 +4090,8 @@ long_true_divide(PyObject *v, PyObject *w)
                     "integer division result too large for a float");
   error:
     return NULL;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 static PyObject *
@@ -3775,10 +4099,21 @@ long_mod(PyObject *a, PyObject *b)
 {
     PyLongObject *mod;
 
+#ifdef BITPACKED
+    if(BITPACKED_LONG_CHECK2(a, b)) {
+        long div, mod;
+        if(bitpacked_l_divmod(a, b, &div, &mod)) BITPACKED_LONG_RETURN(mod);
+        return NULL;
+    }
+#endif
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(b)
     if (l_divmod((PyLongObject*)a, (PyLongObject*)b, NULL, &mod) < 0)
         mod = NULL;
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(a)
     return (PyObject *)mod;
 }
 
@@ -3788,10 +4123,27 @@ long_divmod(PyObject *a, PyObject *b)
     PyLongObject *div, *mod;
     PyObject *z;
 
+#ifdef BITPACKED
+    if(BITPACKED_LONG_CHECK2(a, b)){
+        long div, mod;
+        if(bitpacked_l_divmod(a, b, &div, &mod)){
+            z = PyTuple_New(2);
+            if (z != NULL) {
+                PyTuple_SetItem(z, 0, PyLong_FromLong(div));
+                PyTuple_SetItem(z, 1, PyLong_FromLong(mod));
+                return z;
+            }
+        }
+        return NULL;
+    }
+#endif
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(b)
     if (l_divmod((PyLongObject*)a, (PyLongObject*)b, &div, &mod) < 0) {
-        return NULL;
+        z = NULL;
+        goto exit;
     }
     z = PyTuple_New(2);
     if (z != NULL) {
@@ -3802,6 +4154,9 @@ long_divmod(PyObject *a, PyObject *b)
         Py_DECREF(div);
         Py_DECREF(mod);
     }
+  exit:
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(a)
     return z;
 }
 
@@ -3824,6 +4179,9 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
 
     /* a, b, c = v, w, x */
     CHECK_BINOP(v, w);
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(v)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(w)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(x)
     a = (PyLongObject*)v; Py_INCREF(a);
     b = (PyLongObject*)w; Py_INCREF(b);
     if (PyLong_Check(x)) {
@@ -3833,9 +4191,10 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
     else if (x == Py_None)
         c = NULL;
     else {
-        Py_DECREF(a);
-        Py_DECREF(b);
-        Py_RETURN_NOTIMPLEMENTED;
+        z = (PyLongObject*) Py_NotImplemented;
+        Py_INCREF(z);
+        c = NULL;
+        goto Done;
     }
 
     if (Py_SIZE(b) < 0) {  /* if exponent is negative */
@@ -3848,9 +4207,8 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
             /* else return a float.  This works because we know
                that this calls float_pow() which converts its
                arguments to double. */
-            Py_DECREF(a);
-            Py_DECREF(b);
-            return PyFloat_Type.tp_as_number->nb_power(v, w, x);
+            z = (PyLongObject*) PyFloat_Type.tp_as_number->nb_power(v, w, x);
+            goto Done;
         }
     }
 
@@ -3877,6 +4235,7 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
             _PyLong_Negate(&c);
             if (c == NULL)
                 goto Error;
+            BITPACKED_LONG_INPLACE_CONVENTIONAL(c);
         }
 
         /* if modulus == 1:
@@ -3917,6 +4276,7 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
 #define REDUCE(X)                                       \
     do {                                                \
         if (c != NULL) {                                \
+            BITPACKED_LONG_INPLACE_CONVENTIONAL(X);     \
             if (l_divmod(X, c, NULL, &temp) < 0)        \
                 goto Error;                             \
             Py_XDECREF(X);                              \
@@ -3971,7 +4331,7 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
         }
     }
 
-    if (negativeOutput && (Py_SIZE(z) != 0)) {
+    if (negativeOutput && (BITPACKED_LONG_PSEUDOSIZE(z) != 0)) {
         temp = (PyLongObject *)long_sub(z, c);
         if (temp == NULL)
             goto Error;
@@ -3993,6 +4353,9 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
     Py_DECREF(b);
     Py_XDECREF(c);
     Py_XDECREF(temp);
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(x)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(w)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(v)
     return (PyObject *)z;
 }
 
@@ -4002,6 +4365,9 @@ long_invert(PyLongObject *v)
     /* Implement ~x as -(x+1) */
     PyLongObject *x;
     PyLongObject *w;
+    if(BITPACKED_CHECK(v)) {
+        BITPACKED_LONG_RETURN(~BITPACKED_LONG_VALUE(v));
+    }
     if (Py_ABS(Py_SIZE(v)) <=1)
         return PyLong_FromLong(-(MEDIUM_VALUE(v)+1));
     w = (PyLongObject *)PyLong_FromLong(1L);
@@ -4011,6 +4377,7 @@ long_invert(PyLongObject *v)
     Py_DECREF(w);
     if (x == NULL)
         return NULL;
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(x);
     Py_SIZE(x) = -(Py_SIZE(x));
     return (PyObject *)maybe_small_long(x);
 }
@@ -4019,6 +4386,13 @@ static PyObject *
 long_neg(PyLongObject *v)
 {
     PyLongObject *z;
+#ifdef BITPACKED
+    if(BITPACKED_CHECK(v)) {
+        long n = -(long)BITPACKED_LONG_VALUE(v);
+        CHECK_SMALL_INT(n);
+        return _PyLong_FromLong_conventional(n);
+    }
+#endif
     if (Py_ABS(Py_SIZE(v)) <= 1)
         return PyLong_FromLong(-MEDIUM_VALUE(v));
     z = (PyLongObject *)_PyLong_Copy(v);
@@ -4030,6 +4404,14 @@ long_neg(PyLongObject *v)
 static PyObject *
 long_abs(PyLongObject *v)
 {
+#ifdef BITPACKED
+    if(BITPACKED_CHECK(v)) {
+        long n = (long)BITPACKED_LONG_VALUE(v);
+        if(n < 0) n = -n;
+        CHECK_SMALL_INT(n);
+        return _PyLong_FromLong_conventional(n);
+    }
+#endif
     if (Py_SIZE(v) < 0)
         return long_neg(v);
     else
@@ -4039,7 +4421,7 @@ long_abs(PyLongObject *v)
 static int
 long_bool(PyLongObject *v)
 {
-    return Py_SIZE(v) != 0;
+    return BITPACKED_LONG_PSEUDOSIZE(v) != 0;
 }
 
 static PyObject *
@@ -4049,9 +4431,18 @@ long_rshift(PyLongObject *a, PyLongObject *b)
     Py_ssize_t shiftby, newsize, wordshift, loshift, hishift, i, j;
     digit lomask, himask;
 
+    if(BITPACKED_LONG_CHECK2(a, b)) {
+        int na = BITPACKED_LONG_VALUE(a);
+        int nb = BITPACKED_LONG_VALUE(b);
+        if(nb < 0){
+            PyErr_SetString(PyExc_ValueError,
+                            "negative shift count");
+            return NULL;
+        }
+        BITPACKED_LONG_RETURN(nb >= 32 ? (na >= 0 ? 0 : -1) : na >> nb);
+    }
     CHECK_BINOP(a, b);
-
-    if (Py_SIZE(a) < 0) {
+    if (BITPACKED_LONG_PSEUDOSIZE(a) < 0) {
         /* Right shifting negative numbers is harder */
         PyLongObject *a1, *a2;
         a1 = (PyLongObject *) long_invert(a);
@@ -4065,6 +4456,7 @@ long_rshift(PyLongObject *a, PyLongObject *b)
         Py_DECREF(a2);
     }
     else {
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
         shiftby = PyLong_AsSsize_t((PyObject *)b);
         if (shiftby == -1L && PyErr_Occurred())
             goto rshift_error;
@@ -4092,6 +4484,7 @@ long_rshift(PyLongObject *a, PyLongObject *b)
                 z->ob_digit[i] |= (a->ob_digit[j+1] << hishift) & himask;
         }
         z = long_normalize(z);
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
     }
   rshift_error:
     return (PyObject *) maybe_small_long(z);
@@ -4108,8 +4501,25 @@ long_lshift(PyObject *v, PyObject *w)
     Py_ssize_t shiftby, oldsize, newsize, wordshift, remshift, i, j;
     twodigits accum;
 
+    if(BITPACKED_LONG_CHECK2(a, b)){
+        long na = BITPACKED_LONG_VALUE(a);
+        long nb = BITPACKED_LONG_VALUE(b);
+        long res;
+        if(nb < 0){
+            PyErr_SetString(PyExc_ValueError, "negative shift count");
+            return NULL;
+        }
+        if(na == 0) BITPACKED_LONG_RETURN(0);
+        if(nb < 32){
+            res = na << nb;
+            if(res >> nb == na){
+                CHECK_SMALL_INT(res);
+            }
+        }
+    }
     CHECK_BINOP(a, b);
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
     shiftby = PyLong_AsSsize_t((PyObject *)b);
     if (shiftby == -1L && PyErr_Occurred())
         return NULL;
@@ -4146,6 +4556,7 @@ long_lshift(PyObject *v, PyObject *w)
         assert(!accum);
     z = long_normalize(z);
     return (PyObject *) maybe_small_long(z);
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 /* Compute two's complement of digit vector a[0:m], writing result to
@@ -4176,6 +4587,8 @@ long_bitwise(PyLongObject *a,
     Py_ssize_t size_a, size_b, size_z, i;
     PyLongObject *z;
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     /* Bitwise operations for negative numbers operate as though
        on a two's complement representation.  So convert arguments
        from sign-magnitude to two's complement, and convert the
@@ -4288,12 +4701,15 @@ long_bitwise(PyLongObject *a,
     Py_DECREF(a);
     Py_DECREF(b);
     return (PyObject *)maybe_small_long(long_normalize(z));
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
 }
 
 static PyObject *
 long_and(PyObject *a, PyObject *b)
 {
     PyObject *c;
+    if(BITPACKED_LONG_CHECK2(a, b)) BITPACKED_LONG_RETURN(BITPACKED_LONG_VALUE(a) & BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
     c = long_bitwise((PyLongObject*)a, '&', (PyLongObject*)b);
     return c;
@@ -4303,6 +4719,7 @@ static PyObject *
 long_xor(PyObject *a, PyObject *b)
 {
     PyObject *c;
+    if(BITPACKED_LONG_CHECK2(a, b)) BITPACKED_LONG_RETURN(BITPACKED_LONG_VALUE(a) ^ BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
     c = long_bitwise((PyLongObject*)a, '^', (PyLongObject*)b);
     return c;
@@ -4312,6 +4729,7 @@ static PyObject *
 long_or(PyObject *a, PyObject *b)
 {
     PyObject *c;
+    if(BITPACKED_LONG_CHECK2(a, b)) BITPACKED_LONG_RETURN(BITPACKED_LONG_VALUE(a) | BITPACKED_LONG_VALUE(b));
     CHECK_BINOP(a, b);
     c = long_bitwise((PyLongObject*)a, '|', (PyLongObject*)b);
     return c;
@@ -4337,10 +4755,28 @@ _PyLong_GCD(PyObject *aarg, PyObject *barg)
     Py_ssize_t size_a, size_b, alloc_a, alloc_b;
     digit *a_digit, *b_digit, *c_digit, *d_digit, *a_end, *b_end;
 
+    if(BITPACKED_LONG_CHECK2(aarg, barg)){
+        x = BITPACKED_LONG_VALUE(aarg);
+        y = BITPACKED_LONG_VALUE(barg);
+        x = Py_ABS(x);
+        y = Py_ABS(y);
+        /* usual Euclidean algorithm for longs */
+        while (y != 0) {
+            t = y;
+            y = x % y;
+            x = t;
+        }
+        BITPACKED_LONG_RETURN(x);
+    }
+
     a = (PyLongObject *)aarg;
     b = (PyLongObject *)barg;
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(b)
     size_a = Py_SIZE(a);
     size_b = Py_SIZE(b);
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(a)
     if (-2 <= size_a && size_a <= 2 && -2 <= size_b && size_b <= 2) {
         Py_INCREF(a);
         Py_INCREF(b);
@@ -4363,6 +4799,8 @@ _PyLong_GCD(PyObject *aarg, PyObject *barg)
     }
     /* We now own references to a and b */
 
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(a);
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(b);
     alloc_a = Py_SIZE(a);
     alloc_b = Py_SIZE(b);
     /* reduce until a fits into 2 digits */
@@ -4411,6 +4849,7 @@ _PyLong_GCD(PyObject *aarg, PyObject *barg)
             /* no progress; do a Euclidean step */
             if (l_divmod(a, b, NULL, &r) < 0)
                 goto error;
+            BITPACKED_LONG_INPLACE_CONVENTIONAL(r);
             Py_DECREF(a);
             a = b;
             b = r;
@@ -4612,6 +5051,7 @@ long_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (tmp == NULL)
         return NULL;
     assert(PyLong_CheckExact(tmp));
+    BITPACKED_LONG_INPLACE_CONVENTIONAL(tmp);
     n = Py_SIZE(tmp);
     if (n < 0)
         n = -n;
@@ -4699,12 +5139,14 @@ _PyLong_DivmodNear(PyObject *a, PyObject *b)
         return NULL;
     }
 
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(a)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_BEGIN(b)
     /* Do a and b have different signs?  If so, quotient is negative. */
     quo_is_neg = (Py_SIZE(a) < 0) != (Py_SIZE(b) < 0);
 
     one = PyLong_FromLong(1L);
     if (one == NULL)
-        return NULL;
+        goto error;
 
     if (long_divrem((PyLongObject*)a, (PyLongObject*)b, &quo, &rem) < 0)
         goto error;
@@ -4724,7 +5166,9 @@ _PyLong_DivmodNear(PyObject *a, PyObject *b)
     cmp = long_compare((PyLongObject *)twice_rem, (PyLongObject *)b);
     Py_DECREF(twice_rem);
 
-    quo_is_odd = Py_SIZE(quo) != 0 && ((quo->ob_digit[0] & 1) != 0);
+    quo_is_odd = BITPACKED_LONG_CHECK(quo) 
+                 ? ((BITPACKED_LONG_VALUE(quo) & 1) != 0)
+                 : (Py_SIZE(quo) != 0 && ((quo->ob_digit[0] & 1) != 0));
     if ((Py_SIZE(b) < 0 ? cmp < 0 : cmp > 0) || (cmp == 0 && quo_is_odd)) {
         /* fix up quotient */
         if (quo_is_neg)
@@ -4754,13 +5198,17 @@ _PyLong_DivmodNear(PyObject *a, PyObject *b)
     PyTuple_SET_ITEM(result, 0, (PyObject *)quo);
     PyTuple_SET_ITEM(result, 1, (PyObject *)rem);
     Py_DECREF(one);
-    return result;
+    goto exit;
 
   error:
     Py_XDECREF(quo);
     Py_XDECREF(rem);
     Py_XDECREF(one);
-    return NULL;
+    result = NULL;
+  exit:
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(b)
+BITPACKED_LONG_ASSURE_CONVENTIONAL_END(a)
+    return result;
 }
 
 static PyObject *
@@ -4792,7 +5240,7 @@ long_round(PyObject *self, PyObject *args)
         return NULL;
 
     /* if ndigits >= 0 then no rounding is necessary; return self unchanged */
-    if (Py_SIZE(ndigits) >= 0) {
+    if (BITPACKED_LONG_PSEUDOSIZE(ndigits) >= 0) {
         Py_DECREF(ndigits);
         return long_long(self);
     }
@@ -4836,7 +5284,9 @@ long_sizeof(PyLongObject *v)
 {
     Py_ssize_t res;
 
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_BEGIN(v)
     res = offsetof(PyLongObject, ob_digit) + Py_ABS(Py_SIZE(v))*sizeof(digit);
+BITPACKED_LONG_ASSURE_FAST_CONVENTIONAL_END(v)
     return PyLong_FromSsize_t(res);
 }
 
@@ -4847,6 +5297,19 @@ long_bit_length(PyLongObject *v)
     Py_ssize_t ndigits, msd_bits = 0;
     digit msd;
 
+#ifdef BITPACKED
+    if(BITPACKED_LONG_CHECK(v)) {
+        long n = (long)BITPACKED_LONG_VALUE(v);
+        int value = 0;
+        if(n<0) n = -n;
+        while(n >= 32){
+            value += 6;
+            n >>= 6;
+        }
+        value += (int)(BitLengthTable[n]);
+        BITPACKED_LONG_RETURN(value);
+    }
+#endif
     assert(v != NULL);
     assert(PyLong_Check(v));
 
@@ -5055,7 +5518,9 @@ long_from_bytes(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (type != &PyLong_Type && PyType_IsSubtype(type, &PyLong_Type)) {
         PyLongObject *newobj;
         int i;
-        Py_ssize_t n = Py_ABS(Py_SIZE(long_obj));
+        Py_ssize_t n;
+        BITPACKED_LONG_INPLACE_CONVENTIONAL(long_obj);
+        n = Py_ABS(Py_SIZE(long_obj));
 
         newobj = (PyLongObject *)type->tp_alloc(type, n);
         if (newobj == NULL) {
