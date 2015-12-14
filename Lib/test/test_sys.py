@@ -404,10 +404,13 @@ class SysModuleTest(unittest.TestCase):
         self.assertIsInstance(sys.executable, str)
         self.assertEqual(len(sys.float_info), 11)
         self.assertEqual(sys.float_info.radix, 2)
-        self.assertEqual(len(sys.int_info), 2)
         # support PyLong_GMP_BACKEND mode
-        self.assertTrue(sys.int_info.bits_per_digit % 5 == 0 or
-            sys.int_info.bits_per_digit == sys.int_info.sizeof_digit * 8)
+        if hasattr(sys.int_info, 'gmp_version'):
+            self.assertEqual(len(sys.int_info), 3)
+            self.assertTrue(sys.int_info.bits_per_digit == sys.int_info.sizeof_digit * 8)
+        else:
+            self.assertEqual(len(sys.int_info), 2)
+            self.assertTrue(sys.int_info.bits_per_digit % 5 == 0)
         self.assertTrue(sys.int_info.sizeof_digit >= 1)
         self.assertEqual(type(sys.int_info.bits_per_digit), int)
         self.assertEqual(type(sys.int_info.sizeof_digit), int)

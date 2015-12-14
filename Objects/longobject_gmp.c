@@ -10,6 +10,24 @@
 #define mpz_init_set_abs_pylong(mx, x) \
     mpz_roinit_n((mx), ((PyLongObject*)(x))->ob_digit, Py_ABS(Py_SIZE(x)))
 
+#if __GNU_MP_VERSION < 6
+static mp_limb_t *
+mpz_limbs_read (mpz_ptr x)
+{
+    return x->_mp_d;
+}
+
+static mpz_ptr
+mpz_roinit_n (mpz_ptr x, mp_limb_t *p, ssize_t s)
+{
+    assert(s == 0 || p[Py_ABS(s)-1] > 0);
+    x->_mp_alloc = 0;
+    x->_mp_size = s;
+    x->_mp_d = p;
+    return x;
+}
+#endif
+
 static mpz_t mpz_cached_object;
 /* TODO: temporary mpz_t variable mpz_cached_object should be declared
  * as thread local storage
@@ -2668,6 +2686,7 @@ internal representation of integers.  The attributes are read only.");
 static PyStructSequence_Field int_info_fields[] = {
     {"bits_per_digit", "size of a digit in bits"},
     {"sizeof_digit", "size in bytes of the C type used to represent a digit"},
+    {"gmp_version", "version tuple of GNU MP library"},
     {NULL, NULL}
 };
 
@@ -2675,7 +2694,7 @@ static PyStructSequence_Desc int_info_desc = {
     "sys.int_info",   /* name */
     int_info__doc__,  /* doc */
     int_info_fields,  /* fields */
-    2                 /* number of fields */
+    3                 /* number of fields */
 };
 
 PyObject *
@@ -2690,6 +2709,11 @@ PyLong_GetInfo(void)
                               PyLong_FromLong((sizeof(digit)*8)));
     PyStructSequence_SET_ITEM(int_info, field++,
                               PyLong_FromLong(sizeof(digit)));
+    PyStructSequence_SET_ITEM(int_info, field++,
+                              Py_BuildValue("iii",
+                                  __GNU_MP_VERSION,
+                                  __GNU_MP_VERSION_MINOR,
+                                  __GNU_MP_VERSION_PATCHLEVEL));
     if (PyErr_Occurred()) {
         Py_CLEAR(int_info);
         return NULL;
