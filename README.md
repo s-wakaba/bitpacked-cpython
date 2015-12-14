@@ -1,16 +1,18 @@
 #GMP Backend CPython
 
 This modified implementation of CPython uses GMP (The GNU Multiple Precision Arithmetic Library, see https://gmplib.org/) for the internal implementation of PyLong (default `int`) object.
+
 GMP is a library focused high-performance calculation and there is an existing extension Python module using it.
-In comparison with the module, this version of CPython not requires the installation of an additional module and management for a special type of integer objects.
+In comparison with the module, this version of CPython does not require the installation of any additional modules and management for a special type of integer objects.
 
 ##Building Interpreter
 This has been tested only for x86_64 and i386 POSIX systems.
-This uses a GCC extensional option and it works GCC and compatible compilers including clang and Intel C Compiler.
+This uses a GCC extensional compile option and it works GCC and compatible compilers including clang and Intel C Compiler.
 
 ###Building using system default GMP
 Before building, please install GMP in your system.
-Many system supports installation of GMP via official package repository: `gmp-devel` package (fedora etc.) or `libgmp-dev` package (ubuntu etc.).
+Many systems support installation of GMP via default package repository: `gmp-devel` package (fedora), `libgmp-dev` package (ubuntu) and so on.
+
 Add `--with-libgmp` option when running `./configure` script and compile.
 ```
 $ ./configure --with-libgmp --prefix=/somewhere/to/install
@@ -20,7 +22,7 @@ $ make install
 ```
 The compiled interpreter links GMP using shared library.
 
-###Building using GMP installed specific path
+###Building using GMP installed in specific path
 Add `--with-libgmp=gmp_path` option when running `./configure` script and compile.
 ```
 $ ./configure --with-libgmp=/somewhere/installed/gmp --prefix=/somewhere/to/install
