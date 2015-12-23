@@ -830,6 +830,7 @@ with_fpectl
 with_libm
 with_libc
 with_libgmp
+with_libmpir
 enable_big_digits
 with_computed_gotos
 with_ensurepip
@@ -1519,6 +1520,8 @@ Optional Packages:
   --with-libm=STRING      math library
   --with-libc=STRING      C library
   --with-libgmp=PATH      The GNU Multiple Precision Arithmetic Library
+  --with-libmpir=PATH     GMP compatible library for Multiple Precision
+                          Integers and Rationals
   --with(out)-computed-gotos
                           Use computed gotos in evaluation loop (enabled by
                           default on supported compilers)
@@ -13488,14 +13491,40 @@ $as_echo "#define PyLong_GMP_BACKEND 1" >>confdefs.h
 
      { $as_echo "$as_me:${as_lineno-$LINENO}: result: set LIBGMP=\"$LIBGMP\"" >&5
 $as_echo "set LIBGMP=\"$LIBGMP\"" >&6; }
-     ac_fn_c_check_header_mongrel "$LINENO" "gmp.h" "ac_cv_header_gmp_h" "$ac_includes_default"
-if test "x$ac_cv_header_gmp_h" = xyes; then :
-
+#    AC_CHECK_HEADER([gmp.h], [],
+#                    [AC_MSG_ERROR([GMP support requested but headers not available])])
+fi
 else
-  as_fn_error $? "GMP support requested but headers not available" "$LINENO" 5
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: default LIBGMP=\"$LIBGMP\"" >&5
+$as_echo "default LIBGMP=\"$LIBGMP\"" >&6; }
 fi
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for --with-libmpir=PATH" >&5
+$as_echo_n "checking for --with-libmpir=PATH... " >&6; }
 
+# Check whether --with-libmpir was given.
+if test "${with_libmpir+set}" = set; then :
+  withval=$with_libmpir;
+if test "$withval" = no
+then #LIBGMP=
+     #AC_MSG_RESULT(force LIBGMP empty)
+     true
+else if test "$withval" != yes
+     then LIBGMP="$withval/lib/libmpir.a"
+          BASECPPFLAGS="$BASECPPFLAGS -I$withval/include"
+     else LIBGMP="-lmpir"
+     fi
+     LONGOBJECT_O="longobject_gmp.o"
+
+$as_echo "#define PyLong_GMP_BACKEND 1" >>confdefs.h
+
+
+$as_echo "#define PyLong_GMP_BACKEND_MPIR 1" >>confdefs.h
+
+     { $as_echo "$as_me:${as_lineno-$LINENO}: result: set LIBGMP=\"$LIBGMP\"" >&5
+$as_echo "set LIBGMP=\"$LIBGMP\"" >&6; }
+#    AC_CHECK_HEADER([mpir.h], [],
+#                    [AC_MSG_ERROR([MPIR support requested but headers not available])])
 fi
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: default LIBGMP=\"$LIBGMP\"" >&5

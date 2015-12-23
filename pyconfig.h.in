@@ -1232,6 +1232,9 @@
 /* Enable using Gnu MP library */
 #undef PyLong_GMP_BACKEND
 
+/* MPIR, Gnu MP compatible library */
+#undef PyLong_GMP_BACKEND_MPIR
+
 /* Define if you want to build an interpreter with many run-time checks. */
 #undef Py_DEBUG
 

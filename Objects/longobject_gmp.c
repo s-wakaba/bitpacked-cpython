@@ -2687,6 +2687,9 @@ static PyStructSequence_Field int_info_fields[] = {
     {"bits_per_digit", "size of a digit in bits"},
     {"sizeof_digit", "size in bytes of the C type used to represent a digit"},
     {"gmp_version", "version tuple of GNU MP library"},
+#ifdef PyLong_GMP_BACKEND_MPIR
+    {"mpir_version", "version tuple of MPIR library"},
+#endif
     {NULL, NULL}
 };
 
@@ -2694,7 +2697,11 @@ static PyStructSequence_Desc int_info_desc = {
     "sys.int_info",   /* name */
     int_info__doc__,  /* doc */
     int_info_fields,  /* fields */
+#ifdef PyLong_GMP_BACKEND_MPIR
+    4                 /* number of fields */
+#else
     3                 /* number of fields */
+#endif
 };
 
 PyObject *
@@ -2714,6 +2721,13 @@ PyLong_GetInfo(void)
                                   __GNU_MP_VERSION,
                                   __GNU_MP_VERSION_MINOR,
                                   __GNU_MP_VERSION_PATCHLEVEL));
+#ifdef PyLong_GMP_BACKEND_MPIR
+    PyStructSequence_SET_ITEM(int_info, field++,
+                              Py_BuildValue("iii",
+                                  __MPIR_VERSION,
+                                  __MPIR_VERSION_MINOR,
+                                  __MPIR_VERSION_PATCHLEVEL));
+#endif
     if (PyErr_Occurred()) {
         Py_CLEAR(int_info);
         return NULL;

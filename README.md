@@ -7,6 +7,8 @@ This modified implementation of CPython uses GMP (The GNU Multiple Precision Ari
 GMP is a library focused high-performance calculation and there is an existing extension Python module using it.
 In comparison with the module, this version of CPython does not require the installation of any additional modules and management for a special type of integer objects.
 
+MPIR (see http://mpir.org/), a compatible library for GMP, is also supported.
+
 ##Building Interpreter
 This has been tested only for x86_64 and i386 POSIX systems.
 This uses a GCC extensional compile option and it works GCC and compatible compilers including clang and Intel C Compiler.
@@ -34,6 +36,9 @@ $ make test
 $ make install
 ```
 The compiled interpreter links GMP using static library.
+
+###Building using MPIR
+Add `--with-libmpir` option instead of `--with-libgmp`.
 
 ##Compatibility
 Difference of behaviors between normal and modified version is little.
@@ -66,13 +71,21 @@ real	0m15.149s
 user	0m15.106s
 sys	0m0.011s
 
-$ time ./python bigintcalc.py # modified CPython in 64bit system
+$ time ./python bigintcalc.py # CPython with GMP in 64bit system
 the result has 1498 digits
 sys.int_info(bits_per_digit=64, sizeof_digit=8, gmp_version=(6, 1, 0))
 
 real	0m3.650s
 user	0m3.636s
 sys	0m0.005s
+
+$ time ./python bigintcalc.py # CPython with MPIR in 64bit system
+the result has 1498 digits
+sys.int_info(bits_per_digit=64, sizeof_digit=8, gmp_version=(5, 1, 3), mpir_version=(2, 7, 2))
+
+real	0m3.598s
+user	0m3.583s
+sys	0m0.006s
 ```
 
 

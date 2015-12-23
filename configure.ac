@@ -3969,8 +3969,30 @@ else if test "$withval" != yes
      LONGOBJECT_O="longobject_gmp.o"
      AC_DEFINE(PyLong_GMP_BACKEND, 1, [Enable using Gnu MP library])
      AC_MSG_RESULT(set LIBGMP="$LIBGMP")
-     AC_CHECK_HEADER([gmp.h], [],
-                     [AC_MSG_ERROR([GMP support requested but headers not available])])
+#    AC_CHECK_HEADER([gmp.h], [],
+#                    [AC_MSG_ERROR([GMP support requested but headers not available])])
+fi],
+[AC_MSG_RESULT(default LIBGMP="$LIBGMP")])
+AC_MSG_CHECKING(for --with-libmpir=PATH)
+AC_ARG_WITH(libmpir,
+            AS_HELP_STRING([--with-libmpir=PATH],
+            [GMP compatible library for Multiple Precision Integers and Rationals]),
+[
+if test "$withval" = no
+then #LIBGMP=
+     #AC_MSG_RESULT(force LIBGMP empty)
+     true
+else if test "$withval" != yes
+     then LIBGMP="$withval/lib/libmpir.a"
+          BASECPPFLAGS="$BASECPPFLAGS -I$withval/include"
+     else LIBGMP="-lmpir"
+     fi
+     LONGOBJECT_O="longobject_gmp.o"
+     AC_DEFINE(PyLong_GMP_BACKEND, 1, [Enable using Gnu MP library])
+     AC_DEFINE(PyLong_GMP_BACKEND_MPIR, 1, [MPIR, Gnu MP compatible library])
+     AC_MSG_RESULT(set LIBGMP="$LIBGMP")
+#    AC_CHECK_HEADER([mpir.h], [],
+#                    [AC_MSG_ERROR([MPIR support requested but headers not available])])
 fi],
 [AC_MSG_RESULT(default LIBGMP="$LIBGMP")])
 

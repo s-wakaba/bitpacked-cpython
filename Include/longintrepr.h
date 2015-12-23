@@ -7,7 +7,11 @@ extern "C" {
 
 #ifdef PyLong_GMP_BACKEND
 
+#ifdef PyLong_GMP_BACKEND_MPIR
+#include <mpir.h>
+#else
 #include <gmp.h>
+#endif
 typedef mp_limb_t digit;
 
 #else
