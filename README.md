@@ -1,4 +1,4 @@
-**[GMP Backend CPython is HERE](https://github.com/s-wakaba/bitpacked-cpython/tree/gmp_backend_long-3.5.1)**
+**[GMP Backend CPython is HERE](https://github.com/s-wakaba/bitpacked-cpython/tree/gmp_backend_long-3.5.2)**
 
 #Bit Packed CPython
 
