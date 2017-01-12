@@ -454,6 +454,19 @@ Callable types
 
       .. tabularcolumns:: |l|L|l|
 
+      .. index::
+         single: __doc__ (function attribute)
+         single: __name__ (function attribute)
+         single: __module__ (function attribute)
+         single: __dict__ (function attribute)
+         single: __defaults__ (function attribute)
+         single: __closure__ (function attribute)
+         single: __code__ (function attribute)
+         single: __globals__ (function attribute)
+         single: __annotations__ (function attribute)
+         single: __kwdefaults__ (function attribute)
+         pair: global; namespace
+
       +-------------------------+-------------------------------+-----------+
       | Attribute               | Meaning                       |           |
       +=========================+===============================+===========+
@@ -462,10 +475,11 @@ Callable types
       |                         | unavailable; not inherited by |           |
       |                         | subclasses                    |           |
       +-------------------------+-------------------------------+-----------+
-      | :attr:`__name__`        | The function's name           | Writable  |
+      | :attr:`~definition.\    | The function's name           | Writable  |
+      | __name__`               |                               |           |
       +-------------------------+-------------------------------+-----------+
-      | :attr:`__qualname__`    | The function's                | Writable  |
-      |                         | :term:`qualified name`        |           |
+      | :attr:`~definition.\    | The function's                | Writable  |
+      | __qualname__`           | :term:`qualified name`        |           |
       |                         |                               |           |
       |                         | .. versionadded:: 3.3         |           |
       +-------------------------+-------------------------------+-----------+
@@ -489,7 +503,7 @@ Callable types
       |                         | module in which the function  |           |
       |                         | was defined.                  |           |
       +-------------------------+-------------------------------+-----------+
-      | :attr:`__dict__`        | The namespace supporting      | Writable  |
+      | :attr:`~object.__dict__`| The namespace supporting      | Writable  |
       |                         | arbitrary function            |           |
       |                         | attributes.                   |           |
       +-------------------------+-------------------------------+-----------+
@@ -519,19 +533,6 @@ Callable types
       Additional information about a function's definition can be retrieved from its
       code object; see the description of internal types below.
 
-      .. index::
-         single: __doc__ (function attribute)
-         single: __name__ (function attribute)
-         single: __module__ (function attribute)
-         single: __dict__ (function attribute)
-         single: __defaults__ (function attribute)
-         single: __closure__ (function attribute)
-         single: __code__ (function attribute)
-         single: __globals__ (function attribute)
-         single: __annotations__ (function attribute)
-         single: __kwdefaults__ (function attribute)
-         pair: global; namespace
-
    Instance methods
       .. index::
          object: method
@@ -550,7 +551,7 @@ Callable types
 
       Special read-only attributes: :attr:`__self__` is the class instance object,
       :attr:`__func__` is the function object; :attr:`__doc__` is the method's
-      documentation (same as ``__func__.__doc__``); :attr:`__name__` is the
+      documentation (same as ``__func__.__doc__``); :attr:`~definition.__name__` is the
       method name (same as ``__func__.__name__``); :attr:`__module__` is the
       name of the module the method was defined in, or ``None`` if unavailable.
 
@@ -626,6 +627,25 @@ Callable types
       as well as :keyword:`async with` and :keyword:`async for` statements. See
       also the :ref:`coroutine-objects` section.
 
+   Asynchronous generator functions
+      .. index::
+         single: asynchronous generator; function
+         single: asynchronous generator; asynchronous iterator
+
+      A function or method which is defined using :keyword:`async def` and
+      which uses the :keyword:`yield` statement is called a
+      :dfn:`asynchronous generator function`.  Such a function, when called,
+      returns an asynchronous iterator object which can be used in an
+      :keyword:`async for` statement to execute the body of the function.
+
+      Calling the asynchronous iterator's :meth:`aiterator.__anext__` method
+      will return an :term:`awaitable` which when awaited
+      will execute until it provides a value using the :keyword:`yield`
+      expression.  When the function executes an empty :keyword:`return`
+      statement or falls off the end, a :exc:`StopAsyncIteration` exception
+      is raised and the asynchronous iterator will have reached the end of
+      the set of values to be yielded.
+
    Built-in functions
       .. index::
          object: built-in function
@@ -637,7 +657,7 @@ Callable types
       standard built-in module). The number and type of the arguments are
       determined by the C function. Special read-only attributes:
       :attr:`__doc__` is the function's documentation string, or ``None`` if
-      unavailable; :attr:`__name__` is the function's name; :attr:`__self__` is
+      unavailable; :attr:`~definition.__name__` is the function's name; :attr:`__self__` is
       set to ``None`` (but see the next item); :attr:`__module__` is the name of
       the module the function was defined in or ``None`` if unavailable.
 
@@ -685,10 +705,28 @@ Modules
    Attribute assignment updates the module's namespace dictionary, e.g.,
    ``m.x = 1`` is equivalent to ``m.__dict__["x"] = 1``.
 
+   .. index::
+      single: __name__ (module attribute)
+      single: __doc__ (module attribute)
+      single: __file__ (module attribute)
+      single: __annotations__ (module attribute)
+      pair: module; namespace
+
+   Predefined (writable) attributes: :attr:`__name__` is the module's name;
+   :attr:`__doc__` is the module's documentation string, or ``None`` if
+   unavailable; :attr:`__annotations__` (optional) is a dictionary containing
+   :term:`variable annotations <variable annotation>` collected during module
+   body execution; :attr:`__file__` is the pathname of the file from which the
+   module was loaded, if it was loaded from a file. The :attr:`__file__`
+   attribute may be missing for certain types of modules, such as C modules
+   that are statically linked into the interpreter; for extension modules
+   loaded dynamically from a shared library, it is the pathname of the shared
+   library file.
+
    .. index:: single: __dict__ (module attribute)
 
-   Special read-only attribute: :attr:`__dict__` is the module's namespace as a
-   dictionary object.
+   Special read-only attribute: :attr:`~object.__dict__` is the module's
+   namespace as a dictionary object.
 
    .. impl-detail::
 
@@ -696,21 +734,6 @@ Modules
       dictionary will be cleared when the module falls out of scope even if the
       dictionary still has live references.  To avoid this, copy the dictionary
       or keep the module around while using its dictionary directly.
-
-   .. index::
-      single: __name__ (module attribute)
-      single: __doc__ (module attribute)
-      single: __file__ (module attribute)
-      pair: module; namespace
-
-   Predefined (writable) attributes: :attr:`__name__` is the module's name;
-   :attr:`__doc__` is the module's documentation string, or ``None`` if
-   unavailable; :attr:`__file__` is the pathname of the file from which the
-   module was loaded, if it was loaded from a file. The :attr:`__file__`
-   attribute may be missing for certain types of modules, such as C modules
-   that are statically linked into the interpreter; for extension modules
-   loaded dynamically from a shared library, it is the pathname of the shared
-   library file.
 
 Custom classes
    Custom class types are typically created by class definitions (see section
@@ -743,7 +766,7 @@ Custom classes
    method object, it is transformed into the object wrapped by the static method
    object. See section :ref:`descriptors` for another way in which attributes
    retrieved from a class may differ from those actually contained in its
-   :attr:`__dict__`.
+   :attr:`~object.__dict__`.
 
    .. index:: triple: class; attribute; assignment
 
@@ -760,13 +783,17 @@ Custom classes
       single: __dict__ (class attribute)
       single: __bases__ (class attribute)
       single: __doc__ (class attribute)
+      single: __annotations__ (class attribute)
 
-   Special attributes: :attr:`__name__` is the class name; :attr:`__module__` is
-   the module name in which the class was defined; :attr:`__dict__` is the
+   Special attributes: :attr:`~definition.__name__` is the class name; :attr:`__module__` is
+   the module name in which the class was defined; :attr:`~object.__dict__` is the
    dictionary containing the class's namespace; :attr:`~class.__bases__` is a
    tuple (possibly empty or a singleton) containing the base classes, in the
    order of their occurrence in the base class list; :attr:`__doc__` is the
-   class's documentation string, or None if undefined.
+   class's documentation string, or ``None`` if undefined;
+   :attr:`__annotations__` (optional) is a dictionary containing
+   :term:`variable annotations <variable annotation>` collected during
+   class body execution.
 
 Class instances
    .. index::
@@ -785,7 +812,7 @@ Class instances
    class method objects are also transformed; see above under "Classes".  See
    section :ref:`descriptors` for another way in which attributes of a class
    retrieved via its instances may differ from the objects actually stored in
-   the class's :attr:`__dict__`.  If no class attribute is found, and the
+   the class's :attr:`~object.__dict__`.  If no class attribute is found, and the
    object's class has a :meth:`__getattr__` method, that is called to satisfy
    the lookup.
 
@@ -846,11 +873,9 @@ Internal types
    definitions may change with future versions of the interpreter, but they are
    mentioned here for completeness.
 
-   Code objects
-      .. index::
-         single: bytecode
-         object: code
+   .. index:: bytecode, object; code, code object
 
+   Code objects
       Code objects represent *byte-compiled* executable Python code, or :term:`bytecode`.
       The difference between a code object and a function object is that the function
       object contains an explicit reference to the function's globals (the module in
@@ -1064,6 +1089,12 @@ to ``type(x).__getitem__(x, i)``.  Except where mentioned, attempts to execute a
 operation raise an exception when no appropriate method is defined (typically
 :exc:`AttributeError` or :exc:`TypeError`).
 
+Setting a special method to ``None`` indicates that the corresponding
+operation is not available.  For example, if a class sets
+:meth:`__iter__` to ``None``, the class is not iterable, so calling
+:func:`iter` on its instances will raise a :exc:`TypeError` (without
+falling back to :meth:`__getitem__`). [#]_
+
 When implementing a class that emulates any built-in type, it is important that
 the emulation only be implemented to the degree that it makes sense for the
 object being modelled.  For example, some sequences may work well with retrieval
@@ -1118,7 +1149,7 @@ Basic customization
    instance; for example: ``BaseClass.__init__(self, [args...])``.
 
    Because :meth:`__new__` and :meth:`__init__` work together in constructing
-   objects (:meth:`__new__` to create it, and :meth:`__init__` to customise it),
+   objects (:meth:`__new__` to create it, and :meth:`__init__` to customize it),
    no non-``None`` value may be returned by :meth:`__init__`; doing so will
    cause a :exc:`TypeError` to be raised at runtime.
 
@@ -1234,8 +1265,9 @@ Basic customization
 
 .. method:: object.__format__(self, format_spec)
 
-   Called by the :func:`format` built-in function (and by extension, the
-   :meth:`str.format` method of class :class:`str`) to produce a "formatted"
+   Called by the :func:`format` built-in function,
+   and by extension, evaluation of :ref:`formatted string literals
+   <f-strings>` and the :meth:`str.format` method, to produce a "formatted"
    string representation of an object. The ``format_spec`` argument is
    a string that contains a description of the formatting options desired.
    The interpretation of the ``format_spec`` argument is up to the type
@@ -1468,7 +1500,7 @@ method (a so-called *descriptor* class) appears in an *owner* class (the
 descriptor must be in either the owner's class dictionary or in the class
 dictionary for one of its parents).  In the examples below, "the attribute"
 refers to the attribute whose name is the key of the property in the owner
-class' :attr:`__dict__`.
+class' :attr:`~object.__dict__`.
 
 
 .. method:: object.__get__(self, instance, owner)
@@ -1490,6 +1522,14 @@ class' :attr:`__dict__`.
 .. method:: object.__delete__(self, instance)
 
    Called to delete the attribute on an instance *instance* of the owner class.
+
+
+.. method:: object.__set_name__(self, owner, name)
+
+   Called at the time the owning class *owner* is created. The
+   descriptor has been assigned to *name*.
+
+   .. versionadded:: 3.6
 
 
 The attribute :attr:`__objclass__` is interpreted by the :mod:`inspect` module
@@ -1629,16 +1669,65 @@ Notes on using *__slots__*
 * *__class__* assignment works only if both classes have the same *__slots__*.
 
 
-.. _metaclasses:
+.. _class-customization:
 
 Customizing class creation
 --------------------------
+
+Whenever a class inherits from another class, *__init_subclass__* is
+called on that class. This way, it is possible to write classes which
+change the behavior of subclasses. This is closely related to class
+decorators, but where class decorators only affect the specific class they're
+applied to, ``__init_subclass__`` solely applies to future subclasses of the
+class defining the method.
+
+.. classmethod:: object.__init_subclass__(cls)
+
+   This method is called whenever the containing class is subclassed.
+   *cls* is then the new subclass. If defined as a normal instance method,
+   this method is implicitly converted to a class method.
+
+   Keyword arguments which are given to a new class are passed to
+   the parent's class ``__init_subclass__``. For compatibility with
+   other classes using ``__init_subclass__``, one should take out the
+   needed keyword arguments and pass the others over to the base
+   class, as in::
+
+       class Philosopher:
+           def __init_subclass__(cls, default_name, **kwargs):
+               super().__init_subclass__(**kwargs)
+               cls.default_name = default_name
+
+       class AustralianPhilosopher(Philosopher, default_name="Bruce"):
+           pass
+
+   The default implementation ``object.__init_subclass__`` does
+   nothing, but raises an error if it is called with any arguments.
+
+   .. note::
+
+      The metaclass hint ``metaclass`` is consumed by the rest of the type
+      machinery, and is never passed to ``__init_subclass__`` implementations.
+      The actual metaclass (rather than the explicit hint) can be accessed as
+      ``type(cls)``.
+
+   .. versionadded:: 3.6
+
+
+.. _metaclasses:
+
+Metaclasses
+^^^^^^^^^^^
+
+.. index::
+    single: metaclass
+    builtin: type
 
 By default, classes are constructed using :func:`type`. The class body is
 executed in a new namespace and the class name is bound locally to the
 result of ``type(name, bases, namespace)``.
 
-The class creation process can be customised by passing the ``metaclass``
+The class creation process can be customized by passing the ``metaclass``
 keyword argument in the class definition line, or by inheriting from an
 existing class that included such an argument. In the following example,
 both ``MyClass`` and ``MySubclass`` are instances of ``Meta``::
@@ -1664,6 +1753,8 @@ When a class definition is executed, the following steps occur:
 
 Determining the appropriate metaclass
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. index::
+    single: metaclass hint
 
 The appropriate metaclass for a class definition is determined as follows:
 
@@ -1685,13 +1776,16 @@ that criterion, then the class definition will fail with ``TypeError``.
 Preparing the class namespace
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. index::
+    single: __prepare__ (metaclass method)
+
 Once the appropriate metaclass has been identified, then the class namespace
 is prepared. If the metaclass has a ``__prepare__`` attribute, it is called
 as ``namespace = metaclass.__prepare__(name, bases, **kwds)`` (where the
 additional keyword arguments, if any, come from the class definition).
 
 If the metaclass has no ``__prepare__`` attribute, then the class namespace
-is initialised as an empty :func:`dict` instance.
+is initialised as an empty ordered mapping.
 
 .. seealso::
 
@@ -1702,6 +1796,9 @@ is initialised as an empty :func:`dict` instance.
 Executing the class body
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. index::
+    single: class; body
+
 The class body is executed (approximately) as
 ``exec(body, globals(), namespace)``. The key difference from a normal
 call to :func:`exec` is that lexical scoping allows the class body (including
@@ -1711,11 +1808,18 @@ class definition occurs inside a function.
 However, even when the class definition occurs inside the function, methods
 defined inside the class still cannot see names defined at the class scope.
 Class variables must be accessed through the first parameter of instance or
-class methods, and cannot be accessed at all from static methods.
+class methods, or through the implicit lexically scoped ``__class__`` reference
+described in the next section.
 
+.. _class-object-creation:
 
 Creating the class object
 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. index::
+    single: __class__ (method cell)
+    single: __classcell__ (class namespace entry)
+
 
 Once the class namespace has been populated by executing the class body,
 the class object is created by calling
@@ -1730,9 +1834,34 @@ created by the compiler if any methods in a class body refer to either
 lexical scoping, while the class or instance that was used to make the
 current call is identified based on the first argument passed to the method.
 
+.. impl-detail::
+
+   In CPython 3.6 and later, the ``__class__`` cell is passed to the metaclass
+   as a ``__classcell__`` entry in the class namespace. If present, this must
+   be propagated up to the ``type.__new__`` call in order for the class to be
+   initialised correctly.
+   Failing to do so will result in a :exc:`DeprecationWarning` in Python 3.6,
+   and a :exc:`RuntimeWarning` in the future.
+
+When using the default metaclass :class:`type`, or any metaclass that ultimately
+calls ``type.__new__``, the following additional customisation steps are
+invoked after creating the class object:
+
+* first, ``type.__new__`` collects all of the descriptors in the class
+  namespace that define a :meth:`~object.__set_name__` method;
+* second, all of these ``__set_name__`` methods are called with the class
+  being defined and the assigned name of that particular descriptor; and
+* finally, the :meth:`~object.__init_subclass__` hook is called on the
+  immediate parent of the new class in its method resolution order.
+
 After the class object is created, it is passed to the class decorators
 included in the class definition (if any) and the resulting object is bound
 in the local namespace as the defined class.
+
+When a new class is created by ``type.__new__``, the object provided as the
+namespace parameter is copied to a new ordered mapping and the original
+object is discarded. The new copy is wrapped in a read-only proxy, which
+becomes the :attr:`~object.__dict__` attribute of the class object.
 
 .. seealso::
 
@@ -1753,11 +1882,11 @@ to remember the order that class variables are defined::
 
     class OrderedClass(type):
 
-         @classmethod
-         def __prepare__(metacls, name, bases, **kwds):
+        @classmethod
+        def __prepare__(metacls, name, bases, **kwds):
             return collections.OrderedDict()
 
-         def __new__(cls, name, bases, namespace, **kwds):
+        def __new__(cls, name, bases, namespace, **kwds):
             result = type.__new__(cls, name, bases, dict(namespace))
             result.members = tuple(namespace)
             return result
@@ -2055,7 +2184,7 @@ left undefined.
    (``+``, ``-``, ``*``, ``@``, ``/``, ``//``, ``%``, :func:`divmod`,
    :func:`pow`, ``**``, ``<<``, ``>>``, ``&``, ``^``, ``|``) with reflected
    (swapped) operands.  These functions are only called if the left operand does
-   not support the corresponding operation and the operands are of different
+   not support the corresponding operation [#]_ and the operands are of different
    types. [#]_ For instance, to evaluate the expression ``x - y``, where *y* is
    an instance of a class that has an :meth:`__rsub__` method, ``y.__rsub__(x)``
    is called if ``x.__sub__(y)`` returns *NotImplemented*.
@@ -2188,7 +2317,7 @@ For more information on context managers, see :ref:`typecontextmanager`.
 
 .. seealso::
 
-   :pep:`0343` - The "with" statement
+   :pep:`343` - The "with" statement
       The specification, background, and examples for the Python :keyword:`with`
       statement.
 
@@ -2316,6 +2445,10 @@ Coroutines also have the methods listed below, which are analogous to
 those of generators (see :ref:`generator-methods`).  However, unlike
 generators, coroutines do not directly support iteration.
 
+.. versionchanged:: 3.5.2
+   It is a :exc:`RuntimeError` to await on a coroutine more than once.
+
+
 .. method:: coroutine.send(value)
 
    Starts or resumes execution of the coroutine.  If *value* is ``None``,
@@ -2350,6 +2483,7 @@ generators, coroutines do not directly support iteration.
    Coroutine objects are automatically closed using the above process when
    they are about to be destroyed.
 
+.. _async-iterators:
 
 Asynchronous Iterators
 ----------------------
@@ -2362,7 +2496,7 @@ Asynchronous iterators can be used in an :keyword:`async for` statement.
 
 .. method:: object.__aiter__(self)
 
-   Must return an *awaitable* resulting in an *asynchronous iterator* object.
+   Must return an *asynchronous iterator* object.
 
 .. method:: object.__anext__(self)
 
@@ -2375,7 +2509,7 @@ An example of an asynchronous iterable object::
         async def readline(self):
             ...
 
-        async def __aiter__(self):
+        def __aiter__(self):
             return self
 
         async def __anext__(self):
@@ -2385,6 +2519,49 @@ An example of an asynchronous iterable object::
             return val
 
 .. versionadded:: 3.5
+
+.. note::
+
+   .. versionchanged:: 3.5.2
+      Starting with CPython 3.5.2, ``__aiter__`` can directly return
+      :term:`asynchronous iterators <asynchronous iterator>`.  Returning
+      an :term:`awaitable` object will result in a
+      :exc:`PendingDeprecationWarning`.
+
+      The recommended way of writing backwards compatible code in
+      CPython 3.5.x is to continue returning awaitables from
+      ``__aiter__``.  If you want to avoid the PendingDeprecationWarning
+      and keep the code backwards compatible, the following decorator
+      can be used::
+
+          import functools
+          import sys
+
+          if sys.version_info < (3, 5, 2):
+              def aiter_compat(func):
+                  @functools.wraps(func)
+                  async def wrapper(self):
+                      return func(self)
+                  return wrapper
+          else:
+              def aiter_compat(func):
+                  return func
+
+      Example::
+
+          class AsyncIterator:
+
+              @aiter_compat
+              def __aiter__(self):
+                  return self
+
+              async def __anext__(self):
+                  ...
+
+      Starting with CPython 3.6, the :exc:`PendingDeprecationWarning`
+      will be replaced with the :exc:`DeprecationWarning`.
+      In CPython 3.7, returning an awaitable from ``__aiter__`` will
+      result in a :exc:`RuntimeError`.
 
 
 Asynchronous Context Managers
@@ -2422,6 +2599,17 @@ An example of an asynchronous context manager class::
 .. [#] It *is* possible in some cases to change an object's type, under certain
    controlled conditions. It generally isn't a good idea though, since it can
    lead to some very strange behaviour if it is handled incorrectly.
+
+.. [#] The :meth:`__hash__`, :meth:`__iter__`, :meth:`__reversed__`, and
+   :meth:`__contains__` methods have special handling for this; others
+   will still raise a :exc:`TypeError`, but may do so by relying on
+   the behavior that ``None`` is not callable.
+
+.. [#] "Does not support" here means that the class has no such method, or
+   the method returns ``NotImplemented``.  Do not set the method to
+   ``None`` if you want to force fallback to the right operand's reflected
+   method—that will instead have the opposite effect of explicitly
+   *blocking* such fallback.
 
 .. [#] For operands of the same type, it is assumed that if the non-reflected method
    (such as :meth:`__add__`) fails the operation is not supported, which is why the

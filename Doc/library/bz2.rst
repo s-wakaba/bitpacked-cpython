@@ -3,11 +3,15 @@
 
 .. module:: bz2
    :synopsis: Interfaces for bzip2 compression and decompression.
+
 .. moduleauthor:: Gustavo Niemeyer <niemeyer@conectiva.com>
 .. moduleauthor:: Nadeem Vawda <nadeem.vawda@gmail.com>
 .. sectionauthor:: Gustavo Niemeyer <niemeyer@conectiva.com>
 .. sectionauthor:: Nadeem Vawda <nadeem.vawda@gmail.com>
 
+**Source code:** :source:`Lib/bz2.py`
+
+--------------
 
 This module provides a comprehensive interface for compressing and
 decompressing data using the bzip2 compression algorithm.
@@ -56,6 +60,9 @@ All of the classes in this module may safely be accessed from multiple threads.
 
    .. versionchanged:: 3.4
       The ``'x'`` (exclusive creation) mode was added.
+
+   .. versionchanged:: 3.6
+      Accepts a :term:`path-like object`.
 
 
 .. class:: BZ2File(filename, mode='r', buffering=None, compresslevel=9)
@@ -123,6 +130,9 @@ All of the classes in this module may safely be accessed from multiple threads.
    .. versionchanged:: 3.5
       The :meth:`~io.BufferedIOBase.read` method now accepts an argument of
       ``None``.
+
+   .. versionchanged:: 3.6
+      Accepts a :term:`path-like object`.
 
 
 Incremental (de)compression

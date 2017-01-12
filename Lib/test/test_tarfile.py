@@ -3,6 +3,7 @@ import os
 import io
 from hashlib import md5
 from contextlib import contextmanager
+from random import Random
 
 import unittest
 import unittest.mock
@@ -349,12 +350,17 @@ class CommonReadTest(ReadTest):
 
     def test_ignore_zeros(self):
         # Test TarFile's ignore_zeros option.
+        # generate 512 pseudorandom bytes
+        data = Random(0).getrandbits(512*8).to_bytes(512, 'big')
         for char in (b'\0', b'a'):
             # Test if EOFHeaderError ('\0') and InvalidHeaderError ('a')
             # are ignored correctly.
             with self.open(tmpname, "w") as fobj:
                 fobj.write(char * 1024)
-                fobj.write(tarfile.TarInfo("foo").tobuf())
+                tarinfo = tarfile.TarInfo("foo")
+                tarinfo.size = len(data)
+                fobj.write(tarinfo.tobuf())
+                fobj.write(data)
 
             tar = tarfile.open(tmpname, mode="r", ignore_zeros=True)
             try:
@@ -1667,9 +1673,7 @@ class PaxWriteTest(GNUWriteTest):
             tar.close()
 
 
-class UstarUnicodeTest(unittest.TestCase):
-
-    format = tarfile.USTAR_FORMAT
+class UnicodeTest:
 
     def test_iso8859_1_filename(self):
         self._test_unicode_filename("iso8859-1")
@@ -1750,7 +1754,86 @@ class UstarUnicodeTest(unittest.TestCase):
             tar.close()
 
 
-class GNUUnicodeTest(UstarUnicodeTest):
+class UstarUnicodeTest(UnicodeTest, unittest.TestCase):
+
+    format = tarfile.USTAR_FORMAT
+
+    # Test whether the utf-8 encoded version of a filename exceeds the 100
+    # bytes name field limit (every occurrence of '\xff' will be expanded to 2
+    # bytes).
+    def test_unicode_name1(self):
+        self._test_ustar_name("0123456789" * 10)
+        self._test_ustar_name("0123456789" * 10 + "0", ValueError)
+        self._test_ustar_name("0123456789" * 9 + "01234567\xff")
+        self._test_ustar_name("0123456789" * 9 + "012345678\xff", ValueError)
+
+    def test_unicode_name2(self):
+        self._test_ustar_name("0123456789" * 9 + "012345\xff\xff")
+        self._test_ustar_name("0123456789" * 9 + "0123456\xff\xff", ValueError)
+
+    # Test whether the utf-8 encoded version of a filename exceeds the 155
+    # bytes prefix + '/' + 100 bytes name limit.
+    def test_unicode_longname1(self):
+        self._test_ustar_name("0123456789" * 15 + "01234/" + "0123456789" * 10)
+        self._test_ustar_name("0123456789" * 15 + "0123/4" + "0123456789" * 10, ValueError)
+        self._test_ustar_name("0123456789" * 15 + "012\xff/" + "0123456789" * 10)
+        self._test_ustar_name("0123456789" * 15 + "0123\xff/" + "0123456789" * 10, ValueError)
+
+    def test_unicode_longname2(self):
+        self._test_ustar_name("0123456789" * 15 + "01\xff/2" + "0123456789" * 10, ValueError)
+        self._test_ustar_name("0123456789" * 15 + "01\xff\xff/" + "0123456789" * 10, ValueError)
+
+    def test_unicode_longname3(self):
+        self._test_ustar_name("0123456789" * 15 + "01\xff\xff/2" + "0123456789" * 10, ValueError)
+        self._test_ustar_name("0123456789" * 15 + "01234/" + "0123456789" * 9 + "01234567\xff")
+        self._test_ustar_name("0123456789" * 15 + "01234/" + "0123456789" * 9 + "012345678\xff", ValueError)
+
+    def test_unicode_longname4(self):
+        self._test_ustar_name("0123456789" * 15 + "01234/" + "0123456789" * 9 + "012345\xff\xff")
+        self._test_ustar_name("0123456789" * 15 + "01234/" + "0123456789" * 9 + "0123456\xff\xff", ValueError)
+
+    def _test_ustar_name(self, name, exc=None):
+        with tarfile.open(tmpname, "w", format=self.format, encoding="utf-8") as tar:
+            t = tarfile.TarInfo(name)
+            if exc is None:
+                tar.addfile(t)
+            else:
+                self.assertRaises(exc, tar.addfile, t)
+
+        if exc is None:
+            with tarfile.open(tmpname, "r", encoding="utf-8") as tar:
+                for t in tar:
+                    self.assertEqual(name, t.name)
+                    break
+
+    # Test the same as above for the 100 bytes link field.
+    def test_unicode_link1(self):
+        self._test_ustar_link("0123456789" * 10)
+        self._test_ustar_link("0123456789" * 10 + "0", ValueError)
+        self._test_ustar_link("0123456789" * 9 + "01234567\xff")
+        self._test_ustar_link("0123456789" * 9 + "012345678\xff", ValueError)
+
+    def test_unicode_link2(self):
+        self._test_ustar_link("0123456789" * 9 + "012345\xff\xff")
+        self._test_ustar_link("0123456789" * 9 + "0123456\xff\xff", ValueError)
+
+    def _test_ustar_link(self, name, exc=None):
+        with tarfile.open(tmpname, "w", format=self.format, encoding="utf-8") as tar:
+            t = tarfile.TarInfo("foo")
+            t.linkname = name
+            if exc is None:
+                tar.addfile(t)
+            else:
+                self.assertRaises(exc, tar.addfile, t)
+
+        if exc is None:
+            with tarfile.open(tmpname, "r", encoding="utf-8") as tar:
+                for t in tar:
+                    self.assertEqual(name, t.linkname)
+                    break
+
+
+class GNUUnicodeTest(UnicodeTest, unittest.TestCase):
 
     format = tarfile.GNU_FORMAT
 
@@ -1768,7 +1851,7 @@ class GNUUnicodeTest(UstarUnicodeTest):
                     self.fail("unable to read bad GNU tar pax header")
 
 
-class PAXUnicodeTest(UstarUnicodeTest):
+class PAXUnicodeTest(UnicodeTest, unittest.TestCase):
 
     format = tarfile.PAX_FORMAT
 
@@ -1996,6 +2079,24 @@ class MiscTest(unittest.TestCase):
             tarfile.itn(-0x10000000001, 6, tarfile.GNU_FORMAT)
         with self.assertRaises(ValueError):
             tarfile.itn(0x10000000000, 6, tarfile.GNU_FORMAT)
+
+    def test__all__(self):
+        blacklist = {'version', 'grp', 'pwd', 'symlink_exception',
+                     'NUL', 'BLOCKSIZE', 'RECORDSIZE', 'GNU_MAGIC',
+                     'POSIX_MAGIC', 'LENGTH_NAME', 'LENGTH_LINK',
+                     'LENGTH_PREFIX', 'REGTYPE', 'AREGTYPE', 'LNKTYPE',
+                     'SYMTYPE', 'CHRTYPE', 'BLKTYPE', 'DIRTYPE', 'FIFOTYPE',
+                     'CONTTYPE', 'GNUTYPE_LONGNAME', 'GNUTYPE_LONGLINK',
+                     'GNUTYPE_SPARSE', 'XHDTYPE', 'XGLTYPE', 'SOLARIS_XHDTYPE',
+                     'SUPPORTED_TYPES', 'REGULAR_TYPES', 'GNU_TYPES',
+                     'PAX_FIELDS', 'PAX_NAME_FIELDS', 'PAX_NUMBER_FIELDS',
+                     'stn', 'nts', 'nti', 'itn', 'calc_chksums', 'copyfileobj',
+                     'filemode',
+                     'EmptyHeaderError', 'TruncatedHeaderError',
+                     'EOFHeaderError', 'InvalidHeaderError',
+                     'SubsequentHeaderError', 'ExFileObject',
+                     'main'}
+        support.check__all__(self, tarfile, blacklist=blacklist)
 
 
 class CommandLineTest(unittest.TestCase):

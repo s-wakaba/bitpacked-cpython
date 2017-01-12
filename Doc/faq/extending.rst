@@ -42,7 +42,7 @@ on what you're trying to do.
 .. XXX make sure these all work
 
 `Cython <http://cython.org>`_ and its relative `Pyrex
-<http://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/>`_ are compilers
+<https://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/>`_ are compilers
 that accept a slightly modified form of Python and generate the corresponding
 C code.  Cython and Pyrex make it possible to write an extension without having
 to learn Python's C API.
@@ -50,10 +50,10 @@ to learn Python's C API.
 If you need to interface to some C or C++ library for which no Python extension
 currently exists, you can try wrapping the library's data types and functions
 with a tool such as `SWIG <http://www.swig.org>`_.  `SIP
-<http://www.riverbankcomputing.co.uk/software/sip/intro>`__, `CXX
+<https://riverbankcomputing.com/software/sip/intro>`__, `CXX
 <http://cxx.sourceforge.net/>`_ `Boost
 <http://www.boost.org/libs/python/doc/index.html>`_, or `Weave
-<http://docs.scipy.org/doc/scipy-dev/reference/tutorial/weave.html>`_ are also
+<https://scipy.github.io/devdocs/tutorial/weave.html>`_ are also
 alternatives for wrapping C++ libraries.
 
 
@@ -146,7 +146,9 @@ this object to :data:`sys.stdout` and :data:`sys.stderr`.  Call print_error, or
 just allow the standard traceback mechanism to work. Then, the output will go
 wherever your ``write()`` method sends it.
 
-The easiest way to do this is to use the :class:`io.StringIO` class::
+The easiest way to do this is to use the :class:`io.StringIO` class:
+
+.. code-block:: pycon
 
    >>> import io, sys
    >>> sys.stdout = io.StringIO()
@@ -156,7 +158,9 @@ The easiest way to do this is to use the :class:`io.StringIO` class::
    foo
    hello world!
 
-A custom object to do the same would look like this::
+A custom object to do the same would look like this:
+
+.. code-block:: pycon
 
    >>> import io, sys
    >>> class StdoutCatcher(io.TextIOBase):
@@ -222,11 +226,15 @@ How do I debug an extension?
 When using GDB with dynamically loaded extensions, you can't set a breakpoint in
 your extension until your extension is loaded.
 
-In your ``.gdbinit`` file (or interactively), add the command::
+In your ``.gdbinit`` file (or interactively), add the command:
+
+.. code-block:: none
 
    br _PyImport_LoadDynamicModule
 
-Then, when you run GDB::
+Then, when you run GDB:
+
+.. code-block:: shell-session
 
    $ gdb /local/bin/python
    gdb) run myscript.py
@@ -245,20 +253,6 @@ required for compiling Python extensions.
 For Red Hat, install the python-devel RPM to get the necessary files.
 
 For Debian, run ``apt-get install python-dev``.
-
-
-What does "SystemError: _PyImport_FixupExtension: module yourmodule not loaded" mean?
--------------------------------------------------------------------------------------
-
-This means that you have created an extension module named "yourmodule", but
-your module init function does not initialize with that name.
-
-Every module init function will have a line similar to::
-
-   module = Py_InitModule("yourmodule", yourmodule_functions);
-
-If the string passed to this function is not the same name as your extension
-module, the :exc:`SystemError` exception will be raised.
 
 
 How do I tell "incomplete input" from "invalid input"?

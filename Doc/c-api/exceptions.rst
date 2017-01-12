@@ -74,8 +74,8 @@ Printing and clearing
    :meth:`__del__` method.
 
    The function is called with a single argument *obj* that identifies the context
-   in which the unraisable exception occurred. The repr of *obj* will be printed in
-   the warning message.
+   in which the unraisable exception occurred. If possible,
+   the repr of *obj* will be printed in the warning message.
 
 
 Raising exceptions
@@ -285,7 +285,7 @@ an error value).
 .. c:function:: int PyErr_WarnEx(PyObject *category, const char *message, Py_ssize_t stack_level)
 
    Issue a warning message.  The *category* argument is a warning category (see
-   below) or *NULL*; the *message* argument is an UTF-8 encoded string.  *stack_level* is a
+   below) or *NULL*; the *message* argument is a UTF-8 encoded string.  *stack_level* is a
    positive number giving a number of stack frames; the warning will be issued from
    the  currently executing line of code in that stack frame.  A *stack_level* of 1
    is the function calling :c:func:`PyErr_WarnEx`, 2 is  the function above that,
@@ -305,6 +305,13 @@ an error value).
    For information about warning control, see the documentation for the
    :mod:`warnings` module and the :option:`-W` option in the command line
    documentation.  There is no C API for warning control.
+
+.. c:function:: PyObject* PyErr_SetImportErrorSubclass(PyObject *msg, PyObject *name, PyObject *path)
+
+   Much like :c:func:`PyErr_SetImportError` but this function allows for
+   specifying a subclass of :exc:`ImportError` to raise.
+
+   .. versionadded:: 3.6
 
 
 .. c:function:: int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno, PyObject *module, PyObject *registry)
@@ -332,6 +339,14 @@ an error value).
    an ASCII-encoded string.
 
    .. versionadded:: 3.2
+
+
+.. c:function:: int PyErr_ResourceWarning(PyObject *source, Py_ssize_t stack_level, const char *format, ...)
+
+   Function similar to :c:func:`PyErr_WarnFormat`, but *category* is
+   :exc:`ResourceWarning` and pass *source* to :func:`warnings.WarningMessage`.
+
+   .. versionadded:: 3.6
 
 
 Querying the error indicator
@@ -609,7 +624,7 @@ The following functions are used to create and modify Unicode exceptions from C.
 .. c:function:: PyObject* PyUnicodeTranslateError_Create(const Py_UNICODE *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
 
    Create a :class:`UnicodeTranslateError` object with the attributes *object*,
-   *length*, *start*, *end* and *reason*. *reason* is an UTF-8 encoded string.
+   *length*, *start*, *end* and *reason*. *reason* is a UTF-8 encoded string.
 
 .. c:function:: PyObject* PyUnicodeDecodeError_GetEncoding(PyObject *exc)
                 PyObject* PyUnicodeEncodeError_GetEncoding(PyObject *exc)
@@ -773,6 +788,8 @@ the variables:
 | :c:data:`PyExc_FloatingPointError`      | :exc:`FloatingPointError`       |          |
 +-----------------------------------------+---------------------------------+----------+
 | :c:data:`PyExc_ImportError`             | :exc:`ImportError`              |          |
++-----------------------------------------+---------------------------------+----------+
+| :c:data:`PyExc_ModuleNotFoundError`     | :exc:`ModuleNotFoundError`      |          |
 +-----------------------------------------+---------------------------------+----------+
 | :c:data:`PyExc_IndexError`              | :exc:`IndexError`               |          |
 +-----------------------------------------+---------------------------------+----------+

@@ -534,15 +534,16 @@ decompress(BZ2Decompressor *d, char *data, size_t len, Py_ssize_t max_length)
     }
 
     result = decompress_buf(d, max_length);
-    if(result == NULL)
+    if(result == NULL) {
+        bzs->next_in = NULL;
         return NULL;
+    }
 
     if (d->eof) {
         d->needs_input = 0;
         if (d->bzs_avail_in_real > 0) {
-            Py_CLEAR(d->unused_data);
-            d->unused_data = PyBytes_FromStringAndSize(
-                bzs->next_in, d->bzs_avail_in_real);
+            Py_XSETREF(d->unused_data,
+                      PyBytes_FromStringAndSize(bzs->next_in, d->bzs_avail_in_real));
             if (d->unused_data == NULL)
                 goto error;
         }
@@ -593,7 +594,6 @@ error:
 /*[clinic input]
 _bz2.BZ2Decompressor.decompress
 
-    self: self(type="BZ2Decompressor *")
     data: Py_buffer
     max_length: Py_ssize_t=-1
 
@@ -616,7 +616,7 @@ the unused_data attribute.
 static PyObject *
 _bz2_BZ2Decompressor_decompress_impl(BZ2Decompressor *self, Py_buffer *data,
                                      Py_ssize_t max_length)
-/*[clinic end generated code: output=23e41045deb240a3 input=9558b424c8b00516]*/
+/*[clinic end generated code: output=23e41045deb240a3 input=52e1ffc66a8ea624]*/
 {
     PyObject *result = NULL;
 

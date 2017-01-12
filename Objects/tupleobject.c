@@ -36,6 +36,16 @@ static Py_ssize_t count_tracked = 0;
 static void
 show_track(void)
 {
+    PyObject *xoptions, *value;
+    _Py_IDENTIFIER(showalloccount);
+
+    xoptions = PySys_GetXOptions();
+    if (xoptions == NULL)
+        return;
+    value = _PyDict_GetItemId(xoptions, &PyId_showalloccount);
+    if (value != Py_True)
+        return;
+
     fprintf(stderr, "Tuples created: %" PY_FORMAT_SIZE_T "d\n",
         count_tracked + count_untracked);
     fprintf(stderr, "Tuples tracked by the GC: %" PY_FORMAT_SIZE_T
@@ -149,7 +159,6 @@ PyTuple_GetItem(PyObject *op, Py_ssize_t i)
 int
 PyTuple_SetItem(PyObject *op, Py_ssize_t i, PyObject *newitem)
 {
-    PyObject *olditem;
     PyObject **p;
     if (!PyTuple_Check(op) || op->ob_refcnt != 1) {
         Py_XDECREF(newitem);
@@ -163,9 +172,7 @@ PyTuple_SetItem(PyObject *op, Py_ssize_t i, PyObject *newitem)
         return -1;
     }
     p = ((PyTupleObject *)op) -> ob_item + i;
-    olditem = *p;
-    *p = newitem;
-    Py_XDECREF(olditem);
+    Py_XSETREF(*p, newitem);
     return 0;
 }
 
@@ -446,9 +453,9 @@ tupleconcat(PyTupleObject *a, PyObject *bb)
         return NULL;
     }
 #define b ((PyTupleObject *)bb)
-    size = Py_SIZE(a) + Py_SIZE(b);
-    if (size < 0)
+    if (Py_SIZE(a) > PY_SSIZE_T_MAX - Py_SIZE(b))
         return PyErr_NoMemory();
+    size = Py_SIZE(a) + Py_SIZE(b);
     np = (PyTupleObject *) PyTuple_New(size);
     if (np == NULL) {
         return NULL;
@@ -964,8 +971,8 @@ tupleiter_next(tupleiterobject *it)
         return item;
     }
 
-    Py_DECREF(seq);
     it->it_seq = NULL;
+    Py_DECREF(seq);
     return NULL;
 }
 

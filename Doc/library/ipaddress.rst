@@ -3,6 +3,7 @@
 
 .. module:: ipaddress
    :synopsis: IPv4/IPv6 manipulation library.
+
 .. moduleauthor:: Peter Moody
 
 **Source code:** :source:`Lib/ipaddress.py`
@@ -23,6 +24,10 @@ This is the full module API reference—for an overview and introduction, see
 
 .. versionadded:: 3.3
 
+.. testsetup::
+   >>> import ipaddress
+   >>> from ipaddress import (ip_network, IPv4Address, IPv4Interface,
+   ...                        IPv4Network)
 
 Convenience factory functions
 -----------------------------
@@ -37,13 +42,6 @@ IP addresses, networks and interfaces:
    supplied; integers less than 2**32 will be considered to be IPv4 by default.
    A :exc:`ValueError` is raised if *address* does not represent a valid IPv4
    or IPv6 address.
-
-.. testsetup::
-   >>> import ipaddress
-   >>> from ipaddress import (ip_network, IPv4Address, IPv4Interface,
-   ...                        IPv4Network)
-
-::
 
    >>> ipaddress.ip_address('192.168.0.1')
    IPv4Address('192.168.0.1')
@@ -101,7 +99,7 @@ write code that handles both IP versions correctly.
    The following constitutes a valid IPv4 address:
 
    1. A string in decimal-dot notation, consisting of four decimal integers in
-      the inclusive range 0-255, separated by dots (e.g. ``192.168.0.1``). Each
+      the inclusive range 0--255, separated by dots (e.g. ``192.168.0.1``). Each
       integer represents an octet (byte) in the address. Leading zeroes are
       tolerated only for values less than 8 (as there is no ambiguity
       between the decimal and octal interpretations of such strings).
@@ -158,7 +156,7 @@ write code that handles both IP versions correctly.
       This is the name that could be used for performing a PTR lookup, not the
       resolved hostname itself.
 
-   .. versionadded:: 3.5
+      .. versionadded:: 3.5
 
    .. attribute:: is_multicast
 
@@ -198,8 +196,8 @@ write code that handles both IP versions correctly.
       ``True`` if the address is reserved for link-local usage.  See
       :RFC:`3927`.
 
-.. _iana-ipv4-special-registry: http://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
-.. _iana-ipv6-special-registry: http://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+.. _iana-ipv4-special-registry: https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
+.. _iana-ipv6-special-registry: https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
 
 
 .. class:: IPv6Address(address)
@@ -580,7 +578,7 @@ so to avoid duplication they are only documented for :class:`IPv4Network`.
 
    4. A two-tuple of an address description and a netmask, where the address
       description is either a string, a 128-bits integer, a 16-bytes packed
-      integer, or an existing IPv4Address object; and the netmask is an
+      integer, or an existing IPv6Address object; and the netmask is an
       integer representing the prefix length.
 
    An :exc:`AddressValueError` is raised if *address* is not a valid IPv6
@@ -653,7 +651,7 @@ network.  For iteration, *all* hosts are returned, including unusable hosts
 example::
 
    >>> for addr in IPv4Network('192.0.2.0/28'):
-   ...   addr
+   ...     addr
    ...
    IPv4Address('192.0.2.0')
    IPv4Address('192.0.2.1')

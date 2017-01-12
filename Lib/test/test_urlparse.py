@@ -17,7 +17,6 @@ parse_qsl_test_cases = [
     ("=a", [('', 'a')]),
     ("a", [('a', '')]),
     ("a=", [('a', '')]),
-    ("a=", [('a', '')]),
     ("&a=b", [('a', 'b')]),
     ("a=a+b&b=b+c", [('a', 'a b'), ('b', 'b c')]),
     ("a=1&a=2", [('a', '1'), ('a', '2')]),
@@ -28,10 +27,52 @@ parse_qsl_test_cases = [
     (b"=a", [(b'', b'a')]),
     (b"a", [(b'a', b'')]),
     (b"a=", [(b'a', b'')]),
-    (b"a=", [(b'a', b'')]),
     (b"&a=b", [(b'a', b'b')]),
     (b"a=a+b&b=b+c", [(b'a', b'a b'), (b'b', b'b c')]),
     (b"a=1&a=2", [(b'a', b'1'), (b'a', b'2')]),
+    (";", []),
+    (";;", []),
+    (";a=b", [('a', 'b')]),
+    ("a=a+b;b=b+c", [('a', 'a b'), ('b', 'b c')]),
+    ("a=1;a=2", [('a', '1'), ('a', '2')]),
+    (b";", []),
+    (b";;", []),
+    (b";a=b", [(b'a', b'b')]),
+    (b"a=a+b;b=b+c", [(b'a', b'a b'), (b'b', b'b c')]),
+    (b"a=1;a=2", [(b'a', b'1'), (b'a', b'2')]),
+]
+
+parse_qs_test_cases = [
+    ("", {}),
+    ("&", {}),
+    ("&&", {}),
+    ("=", {'': ['']}),
+    ("=a", {'': ['a']}),
+    ("a", {'a': ['']}),
+    ("a=", {'a': ['']}),
+    ("&a=b", {'a': ['b']}),
+    ("a=a+b&b=b+c", {'a': ['a b'], 'b': ['b c']}),
+    ("a=1&a=2", {'a': ['1', '2']}),
+    (b"", {}),
+    (b"&", {}),
+    (b"&&", {}),
+    (b"=", {b'': [b'']}),
+    (b"=a", {b'': [b'a']}),
+    (b"a", {b'a': [b'']}),
+    (b"a=", {b'a': [b'']}),
+    (b"&a=b", {b'a': [b'b']}),
+    (b"a=a+b&b=b+c", {b'a': [b'a b'], b'b': [b'b c']}),
+    (b"a=1&a=2", {b'a': [b'1', b'2']}),
+    (";", {}),
+    (";;", {}),
+    (";a=b", {'a': ['b']}),
+    ("a=a+b;b=b+c", {'a': ['a b'], 'b': ['b c']}),
+    ("a=1;a=2", {'a': ['1', '2']}),
+    (b";", {}),
+    (b";;", {}),
+    (b";a=b", {b'a': [b'b']}),
+    (b"a=a+b;b=b+c", {b'a': [b'a b'], b'b': [b'b c']}),
+    (b"a=1;a=2", {b'a': [b'1', b'2']}),
 ]
 
 class UrlParseTestCase(unittest.TestCase):
@@ -93,6 +134,16 @@ class UrlParseTestCase(unittest.TestCase):
             self.assertEqual(result, expect, "Error parsing %r" % orig)
             expect_without_blanks = [v for v in expect if len(v[1])]
             result = urllib.parse.parse_qsl(orig, keep_blank_values=False)
+            self.assertEqual(result, expect_without_blanks,
+                            "Error parsing %r" % orig)
+
+    def test_qs(self):
+        for orig, expect in parse_qs_test_cases:
+            result = urllib.parse.parse_qs(orig, keep_blank_values=True)
+            self.assertEqual(result, expect, "Error parsing %r" % orig)
+            expect_without_blanks = {v: expect[v]
+                                     for v in expect if len(expect[v][0])}
+            result = urllib.parse.parse_qs(orig, keep_blank_values=False)
             self.assertEqual(result, expect_without_blanks,
                             "Error parsing %r" % orig)
 
@@ -374,6 +425,8 @@ class UrlParseTestCase(unittest.TestCase):
         self.checkJoin('', 'http://a/./g', 'http://a/./g')
         self.checkJoin('svn://pathtorepo/dir1', 'dir2', 'svn://pathtorepo/dir2')
         self.checkJoin('svn+ssh://pathtorepo/dir1', 'dir2', 'svn+ssh://pathtorepo/dir2')
+        self.checkJoin('ws://a/b','g','ws://a/g')
+        self.checkJoin('wss://a/b','g','wss://a/g')
 
         # XXX: The following tests are no longer compatible with RFC3986
         # self.checkJoin(SIMPLE_BASE, '../../../g','http://a/../g')
@@ -554,29 +607,27 @@ class UrlParseTestCase(unittest.TestCase):
         self.assertEqual(p.port, 80)
         self.assertEqual(p.geturl(), url)
 
-        # Verify an illegal port is returned as None
+        # Verify an illegal port raises ValueError
         url = b"HTTP://WWW.PYTHON.ORG:65536/doc/#frag"
         p = urllib.parse.urlsplit(url)
-        self.assertEqual(p.port, None)
+        with self.assertRaisesRegex(ValueError, "out of range"):
+            p.port
 
     def test_attributes_bad_port(self):
-        """Check handling of non-integer ports."""
-        p = urllib.parse.urlsplit("http://www.example.net:foo")
-        self.assertEqual(p.netloc, "www.example.net:foo")
-        self.assertRaises(ValueError, lambda: p.port)
-
-        p = urllib.parse.urlparse("http://www.example.net:foo")
-        self.assertEqual(p.netloc, "www.example.net:foo")
-        self.assertRaises(ValueError, lambda: p.port)
-
-        # Once again, repeat ourselves to test bytes
-        p = urllib.parse.urlsplit(b"http://www.example.net:foo")
-        self.assertEqual(p.netloc, b"www.example.net:foo")
-        self.assertRaises(ValueError, lambda: p.port)
-
-        p = urllib.parse.urlparse(b"http://www.example.net:foo")
-        self.assertEqual(p.netloc, b"www.example.net:foo")
-        self.assertRaises(ValueError, lambda: p.port)
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc
+                        if bytes:
+                            netloc = netloc.encode("ascii")
+                            url = url.encode("ascii")
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
 
     def test_attributes_without_netloc(self):
         # This example is straight from RFC 3261.  It looks like it

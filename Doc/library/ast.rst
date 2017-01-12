@@ -99,6 +99,7 @@ Abstract Grammar
 The abstract grammar is currently defined as follows:
 
 .. literalinclude:: ../../Parser/Python.asdl
+   :language: none
 
 
 :mod:`ast` Helpers
@@ -249,3 +250,8 @@ and classes for traversing abstract syntax trees:
    wanted *annotate_fields* must be set to ``False``.  Attributes such as line
    numbers and column offsets are not dumped by default.  If this is wanted,
    *include_attributes* can be set to ``True``.
+
+.. seealso::
+
+    `Green Tree Snakes <https://greentreesnakes.readthedocs.org/>`_, an external documentation resource, has good
+    details on working with Python ASTs.

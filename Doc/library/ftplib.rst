@@ -4,19 +4,18 @@
 .. module:: ftplib
    :synopsis: FTP protocol client (requires sockets).
 
+**Source code:** :source:`Lib/ftplib.py`
 
 .. index::
    pair: FTP; protocol
    single: FTP; ftplib (standard module)
-
-**Source code:** :source:`Lib/ftplib.py`
 
 --------------
 
 This module defines the class :class:`FTP` and a few related items. The
 :class:`FTP` class implements the client side of the FTP protocol.  You can use
 this to write Python programs that perform a variety of automated FTP jobs, such
-as mirroring other ftp servers.  It is also used by the module
+as mirroring other FTP servers.  It is also used by the module
 :mod:`urllib.request` to handle URLs that use FTP.  For more information on FTP
 (File Transfer Protocol), see Internet :rfc:`959`.
 
@@ -58,7 +57,7 @@ The module defines the following items:
     >>> with FTP("ftp1.at.proftpd.org") as ftp:
     ...     ftp.login()
     ...     ftp.dir()
-    ...
+    ... # doctest: +SKIP
     '230 Anonymous login ok, restrictions apply.'
     dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 .
     dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 ..
@@ -97,6 +96,13 @@ The module defines the following items:
       The class now supports hostname check with
       :attr:`ssl.SSLContext.check_hostname` and *Server Name Indication* (see
       :data:`ssl.HAS_SNI`).
+
+   .. deprecated:: 3.6
+
+       *keyfile* and *certfile* are deprecated in favor of *context*.
+       Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
+       :func:`ssl.create_default_context` select the system's trusted CA
+       certificates for you.
 
    Here's a sample session using the :class:`FTP_TLS` class::
 
@@ -147,12 +153,6 @@ The module defines the following items:
       Parser for the :file:`.netrc` file format.  The file :file:`.netrc` is
       typically used by FTP clients to load user authentication information
       before prompting the user.
-
-   .. index:: single: ftpmirror.py
-
-   The file :file:`Tools/scripts/ftpmirror.py` in the Python source distribution is
-   a script that can mirror FTP sites, or portions thereof, using the :mod:`ftplib`
-   module. It can be used as an extended example that applies this module.
 
 
 .. _ftp-objects:
@@ -314,7 +314,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
 
 .. method:: FTP.mlsd(path="", facts=[])
 
-   List a directory in a standardized format by using MLSD command
+   List a directory in a standardized format by using ``MLSD`` command
    (:rfc:`3659`).  If *path* is omitted the current directory is assumed.
    *facts* is a list of strings representing the type of information desired
    (e.g. ``["type", "size", "perm"]``).  Return a generator object yielding a
@@ -333,7 +333,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    directory).  Multiple arguments can be used to pass non-standard options to
    the ``NLST`` command.
 
-   .. deprecated:: 3.3 use :meth:`mlsd` instead.
+   .. note:: If your server supports the command, :meth:`mlsd` offers a better API.
 
 
 .. method:: FTP.dir(argument[, ...])
@@ -345,7 +345,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    as a *callback* function as for :meth:`retrlines`; the default prints to
    ``sys.stdout``.  This method returns ``None``.
 
-   .. deprecated:: 3.3 use :meth:`mlsd` instead.
+   .. note:: If your server supports the command, :meth:`mlsd` offers a better API.
 
 
 .. method:: FTP.rename(fromname, toname)

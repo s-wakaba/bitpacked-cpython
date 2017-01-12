@@ -361,19 +361,22 @@ Notes:
 All :class:`numbers.Real` types (:class:`int` and :class:`float`) also include
 the following operations:
 
-+--------------------+------------------------------------+--------+
-| Operation          | Result                             | Notes  |
-+====================+====================================+========+
-| ``math.trunc(x)``  | *x* truncated to Integral          |        |
-+--------------------+------------------------------------+--------+
-| ``round(x[, n])``  | *x* rounded to n digits,           |        |
-|                    | rounding half to even. If n is     |        |
-|                    | omitted, it defaults to 0.         |        |
-+--------------------+------------------------------------+--------+
-| ``math.floor(x)``  | the greatest integral float <= *x* |        |
-+--------------------+------------------------------------+--------+
-| ``math.ceil(x)``   | the least integral float >= *x*    |        |
-+--------------------+------------------------------------+--------+
++--------------------+---------------------------------------------+
+| Operation          | Result                                      |
++====================+=============================================+
+| :func:`math.trunc(\| *x* truncated to :class:`~numbers.Integral` |
+| x) <math.trunc>`   |                                             |
++--------------------+---------------------------------------------+
+| :func:`round(x[,   | *x* rounded to *n* digits,                  |
+| n]) <round>`       | rounding half to even. If *n* is            |
+|                    | omitted, it defaults to 0.                  |
++--------------------+---------------------------------------------+
+| :func:`math.floor(\| the greatest :class:`~numbers.Integral`     |
+| x) <math.floor>`   | <= *x*                                      |
++--------------------+---------------------------------------------+
+| :func:`math.ceil(x)| the least :class:`~numbers.Integral` >= *x* |
+| <math.ceil>`       |                                             |
++--------------------+---------------------------------------------+
 
 For additional numeric operations see the :mod:`math` and :mod:`cmath`
 modules.
@@ -397,8 +400,8 @@ Bitwise Operations on Integer Types
    operator: >>
 
 Bitwise operations only make sense for integers.  Negative numbers are treated
-as their 2's complement value (this assumes a sufficiently large number of bits
-that no overflow occurs during the operation).
+as their 2's complement value (this assumes that there are enough bits so that
+no overflow occurs during the operation).
 
 The priorities of the binary bitwise operations are all lower than the numeric
 operations and higher than the comparisons; the unary operation ``~`` has the
@@ -482,7 +485,7 @@ class`. In addition, it provides a few more methods:
         >>> (-1024).to_bytes(10, byteorder='big', signed=True)
         b'\xff\xff\xff\xff\xff\xff\xff\xff\xfc\x00'
         >>> x = 1000
-        >>> x.to_bytes((x.bit_length() // 8) + 1, byteorder='little')
+        >>> x.to_bytes((x.bit_length() + 7) // 8, byteorder='little')
         b'\xe8\x03'
 
     The integer is represented using *length* bytes.  An :exc:`OverflowError`
@@ -689,16 +692,16 @@ number, :class:`float`, or :class:`complex`::
            m, n = m // P, n // P
 
        if n % P == 0:
-           hash_ = sys.hash_info.inf
+           hash_value = sys.hash_info.inf
        else:
            # Fermat's Little Theorem: pow(n, P-1, P) is 1, so
            # pow(n, P-2, P) gives the inverse of n modulo P.
-           hash_ = (abs(m) % P) * pow(n, P - 2, P) % P
+           hash_value = (abs(m) % P) * pow(n, P - 2, P) % P
        if m < 0:
-           hash_ = -hash_
-       if hash_ == -1:
-           hash_ = -2
-       return hash_
+           hash_value = -hash_value
+       if hash_value == -1:
+           hash_value = -2
+       return hash_value
 
    def hash_float(x):
        """Compute the hash of a float x."""
@@ -713,13 +716,13 @@ number, :class:`float`, or :class:`complex`::
    def hash_complex(z):
        """Compute the hash of a complex number z."""
 
-       hash_ = hash_float(z.real) + sys.hash_info.imag * hash_float(z.imag)
+       hash_value = hash_float(z.real) + sys.hash_info.imag * hash_float(z.imag)
        # do a signed reduction modulo 2**sys.hash_info.width
        M = 2**(sys.hash_info.width - 1)
-       hash_ = (hash_ & (M - 1)) - (hash & M)
-       if hash_ == -1:
-           hash_ == -2
-       return hash_
+       hash_value = (hash_value & (M - 1)) - (hash_value & M)
+       if hash_value == -1:
+           hash_value = -2
+       return hash_value
 
 .. _typeiter:
 
@@ -1298,16 +1301,16 @@ loops.
    only represent sequences that follow a strict pattern and repetition and
    concatenation will usually violate that pattern).
 
-   .. data: start
+   .. attribute:: start
 
       The value of the *start* parameter (or ``0`` if the parameter was
       not supplied)
 
-   .. data: stop
+   .. attribute:: stop
 
       The value of the *stop* parameter
 
-   .. data: step
+   .. attribute:: step
 
       The value of the *step* parameter (or ``1`` if the parameter was
       not supplied)
@@ -1360,6 +1363,11 @@ objects that compare equal might have different :attr:`~range.start`,
    The :attr:`~range.start`, :attr:`~range.stop` and :attr:`~range.step`
    attributes.
 
+.. seealso::
+
+   * The `linspace recipe <http://code.activestate.com/recipes/579000/>`_
+     shows how to implement a lazy version of range that suitable for floating
+     point applications.
 
 .. index::
    single: string; text sequence type
@@ -1450,8 +1458,8 @@ multiple fragments.
 
    For more information on the ``str`` class and its methods, see
    :ref:`textseq` and the :ref:`string-methods` section below.  To output
-   formatted strings, see the :ref:`string-formatting` section.  In addition,
-   see the :ref:`stringservices` section.
+   formatted strings, see the :ref:`f-strings` and :ref:`formatstrings`
+   sections.  In addition, see the :ref:`stringservices` section.
 
 
 .. index::
@@ -1563,10 +1571,9 @@ expression support in the :mod:`re` module).
 
 .. method:: str.find(sub[, start[, end]])
 
-   Return the lowest index in the string where substring *sub* is found, such
-   that *sub* is contained in the slice ``s[start:end]``.  Optional arguments
-   *start* and *end* are interpreted as in slice notation.  Return ``-1`` if
-   *sub* is not found.
+   Return the lowest index in the string where substring *sub* is found within
+   the slice ``s[start:end]``.  Optional arguments *start* and *end* are
+   interpreted as in slice notation.  Return ``-1`` if *sub* is not found.
 
    .. note::
 
@@ -1749,13 +1756,13 @@ expression support in the :mod:`re` module).
 
    If there is only one argument, it must be a dictionary mapping Unicode
    ordinals (integers) or characters (strings of length 1) to Unicode ordinals,
-   strings (of arbitrary lengths) or None.  Character keys will then be
+   strings (of arbitrary lengths) or ``None``.  Character keys will then be
    converted to ordinals.
 
    If there are two arguments, they must be strings of equal length, and in the
    resulting dictionary, each character in x will be mapped to the character at
    the same position in y.  If there is a third argument, it must be a string,
-   whose characters will be mapped to None in the result.
+   whose characters will be mapped to ``None`` in the result.
 
 
 .. method:: str.partition(sep)
@@ -2054,8 +2061,8 @@ expression support in the :mod:`re` module).
 .. index::
    single: formatting, string (%)
    single: interpolation, string (%)
-   single: string; formatting
-   single: string; interpolation
+   single: string; formatting, printf
+   single: string; interpolation, printf
    single: printf-style formatting
    single: sprintf-style formatting
    single: % formatting
@@ -2065,9 +2072,10 @@ expression support in the :mod:`re` module).
 
    The formatting operations described here exhibit a variety of quirks that
    lead to a number of common errors (such as failing to display tuples and
-   dictionaries correctly).  Using the newer :meth:`str.format` interface
-   helps avoid these errors, and also provides a generally more powerful,
-   flexible and extensible approach to formatting text.
+   dictionaries correctly).  Using the newer :ref:`formatted
+   string literals <f-strings>` or the :meth:`str.format` interface
+   helps avoid these errors.  These alternatives also provide more powerful,
+   flexible and extensible approaches to formatting text.
 
 String objects have one unique built-in operation: the ``%`` operator (modulo).
 This is also known as the string *formatting* or *interpolation* operator.
@@ -2628,8 +2636,8 @@ arbitrary binary data.
    The prefix(es) to search for may be any :term:`bytes-like object`.
 
 
-.. method:: bytes.translate(table[, delete])
-            bytearray.translate(table[, delete])
+.. method:: bytes.translate(table, delete=b'')
+            bytearray.translate(table, delete=b'')
 
    Return a copy of the bytes or bytearray object where all bytes occurring in
    the optional argument *delete* are removed, and the remaining bytes have
@@ -2644,6 +2652,9 @@ arbitrary binary data.
 
       >>> b'read this short text'.translate(None, b'aeiou')
       b'rd ths shrt txt'
+
+   .. versionchanged:: 3.6
+      *delete* is now supported as a keyword argument.
 
 
 The following methods on bytes and bytearray objects have default behaviours
@@ -2940,7 +2951,7 @@ place, and instead produce new objects.
 
    Return true if all bytes in the sequence are ASCII whitespace and the
    sequence is not empty, false otherwise.  ASCII whitespace characters are
-   those byte values in the sequence b' \t\n\r\x0b\f' (space, tab, newline,
+   those byte values in the sequence ``b' \t\n\r\x0b\f'`` (space, tab, newline,
    carriage return, vertical tab, form feed).
 
 
@@ -3749,7 +3760,7 @@ copying.
       memory as an N-dimensional array.
 
       .. versionchanged:: 3.3
-         An empty tuple instead of None when ndim = 0.
+         An empty tuple instead of ``None`` when ndim = 0.
 
    .. attribute:: strides
 
@@ -3757,7 +3768,7 @@ copying.
       access each element for each dimension of the array.
 
       .. versionchanged:: 3.3
-         An empty tuple instead of None when ndim = 0.
+         An empty tuple instead of ``None`` when ndim = 0.
 
    .. attribute:: suboffsets
 
@@ -3829,7 +3840,7 @@ The constructors for both classes work the same:
 
    .. describe:: len(s)
 
-      Return the cardinality of set *s*.
+      Return the number of elements in set *s* (cardinality of *s*).
 
    .. describe:: x in s
 
@@ -3864,17 +3875,17 @@ The constructors for both classes work the same:
       Test whether the set is a proper superset of *other*, that is, ``set >=
       other and set != other``.
 
-   .. method:: union(other, ...)
+   .. method:: union(*others)
                set | other | ...
 
       Return a new set with elements from the set and all others.
 
-   .. method:: intersection(other, ...)
+   .. method:: intersection(*others)
                set & other & ...
 
       Return a new set with elements common to the set and all others.
 
-   .. method:: difference(other, ...)
+   .. method:: difference(*others)
                set - other - ...
 
       Return a new set with elements in the set that are not in the others.
@@ -3924,17 +3935,17 @@ The constructors for both classes work the same:
    The following table lists operations available for :class:`set` that do not
    apply to immutable instances of :class:`frozenset`:
 
-   .. method:: update(other, ...)
+   .. method:: update(*others)
                set |= other | ...
 
       Update the set, adding elements from all others.
 
-   .. method:: intersection_update(other, ...)
+   .. method:: intersection_update(*others)
                set &= other & ...
 
       Update the set, keeping only elements found in it and all others.
 
-   .. method:: difference_update(other, ...)
+   .. method:: difference_update(*others)
                set -= other | ...
 
       Update the set, removing elements found in others.
@@ -4358,9 +4369,10 @@ an (external) *definition* for a module named *foo* somewhere.)
 A special attribute of every module is :attr:`~object.__dict__`. This is the
 dictionary containing the module's symbol table. Modifying this dictionary will
 actually change the module's symbol table, but direct assignment to the
-:attr:`__dict__` attribute is not possible (you can write
+:attr:`~object.__dict__` attribute is not possible (you can write
 ``m.__dict__['a'] = 1``, which defines ``m.a`` to be ``1``, but you can't write
-``m.__dict__ = {}``).  Modifying :attr:`__dict__` directly is not recommended.
+``m.__dict__ = {}``).  Modifying :attr:`~object.__dict__` directly is
+not recommended.
 
 Modules built into the interpreter are written like this: ``<module 'sys'
 (built-in)>``.  If loaded from a file, they are written as ``<module 'os' from
@@ -4434,12 +4446,12 @@ attribute, you need to explicitly set it on the underlying function object::
 See :ref:`types` for more information.
 
 
+.. index:: object; code, code object
+
 .. _bltin-code-objects:
 
 Code Objects
 ------------
-
-.. index:: object: code
 
 .. index::
    builtin: compile
@@ -4573,14 +4585,16 @@ types, where they are relevant.  Some of these are not reported by the
    The tuple of base classes of a class object.
 
 
-.. attribute:: class.__name__
+.. attribute:: definition.__name__
 
-   The name of the class or type.
+   The name of the class, function, method, descriptor, or
+   generator instance.
 
 
-.. attribute:: class.__qualname__
+.. attribute:: definition.__qualname__
 
-   The :term:`qualified name` of the class or type.
+   The :term:`qualified name` of the class, function, method, descriptor,
+   or generator instance.
 
    .. versionadded:: 3.3
 

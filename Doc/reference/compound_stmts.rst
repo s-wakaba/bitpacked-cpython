@@ -439,7 +439,7 @@ is equivalent to ::
 
 .. seealso::
 
-   :pep:`0343` - The "with" statement
+   :pep:`343` - The "with" statement
       The specification, background, and examples for the Python :keyword:`with`
       statement.
 
@@ -469,12 +469,12 @@ A function definition defines a user-defined function object (see section
 .. productionlist::
    funcdef: [`decorators`] "def" `funcname` "(" [`parameter_list`] ")" ["->" `expression`] ":" `suite`
    decorators: `decorator`+
-   decorator: "@" `dotted_name` ["(" [`parameter_list` [","]] ")"] NEWLINE
+   decorator: "@" `dotted_name` ["(" [`argument_list` [","]] ")"] NEWLINE
    dotted_name: `identifier` ("." `identifier`)*
-   parameter_list: (`defparameter` ",")*
-                 : | "*" [`parameter`] ("," `defparameter`)* ["," "**" `parameter`]
-                 : | "**" `parameter`
-                 : | `defparameter` [","] )
+   parameter_list: `defparameter` ("," `defparameter`)* ["," [`parameter_list_starargs`]]
+                 : | `parameter_list_starargs`
+   parameter_list_starargs: "*" [`parameter`] ("," `defparameter`)* ["," ["**" `parameter` [","]]]
+                         : | "**" `parameter` [","]
    parameter: `identifier` [":" `expression`]
    defparameter: `parameter` ["=" `expression`]
    funcname: `identifier`
@@ -503,10 +503,12 @@ are applied in nested fashion. For example, the following code ::
    @f2
    def func(): pass
 
-is equivalent to ::
+is roughly equivalent to ::
 
    def func(): pass
    func = f1(arg)(f2(func))
+
+except that the original function is not temporarily bound to the name ``func``.
 
 .. index::
    triple: default; parameter; value
@@ -544,11 +546,12 @@ Function call semantics are described in more detail in section :ref:`calls`. A
 function call always assigns values to all parameters mentioned in the parameter
 list, either from position arguments, from keyword arguments, or from default
 values.  If the form "``*identifier``" is present, it is initialized to a tuple
-receiving any excess positional parameters, defaulting to the empty tuple.  If
-the form "``**identifier``" is present, it is initialized to a new dictionary
-receiving any excess keyword arguments, defaulting to a new empty dictionary.
-Parameters after "``*``" or "``*identifier``" are keyword-only parameters and
-may only be passed used keyword arguments.
+receiving any excess positional parameters, defaulting to the empty tuple.
+If the form "``**identifier``" is present, it is initialized to a new
+ordered mapping receiving any excess keyword arguments, defaulting to a
+new empty mapping of the same type.  Parameters after "``*``" or
+"``*identifier``" are keyword-only parameters and may only be passed
+used keyword arguments.
 
 .. index:: pair: function; annotations
 
@@ -604,7 +607,7 @@ A class definition defines a class object (see section :ref:`types`):
 
 .. productionlist::
    classdef: [`decorators`] "class" `classname` [`inheritance`] ":" `suite`
-   inheritance: "(" [`parameter_list`] ")"
+   inheritance: "(" [`argument_list`] ")"
    classname: `identifier`
 
 A class definition is an executable statement.  The inheritance list usually
@@ -630,6 +633,11 @@ list for the base classes and the saved local namespace for the attribute
 dictionary.  The class name is bound to this class object in the original local
 namespace.
 
+The order in which attributes are defined in the class body is preserved
+in the new class's ``__dict__``.  Note that this is reliable only right
+after the class is created and only for classes that were defined using
+the definition syntax.
+
 Class creation can be customized heavily using :ref:`metaclasses <metaclasses>`.
 
 Classes can also be decorated: just like when decorating functions, ::
@@ -638,14 +646,13 @@ Classes can also be decorated: just like when decorating functions, ::
    @f2
    class Foo: pass
 
-is equivalent to ::
+is roughly equivalent to ::
 
    class Foo: pass
    Foo = f1(arg)(f2(Foo))
 
 The evaluation rules for the decorator expressions are the same as for function
-decorators.  The result must be a class object, which is then bound to the class
-name.
+decorators.  The result is then bound to the class name.
 
 **Programmer's note:** Variables defined in the class definition are class
 attributes; they are shared by instances.  Instance attributes can be set in a
@@ -690,7 +697,7 @@ coroutine bodies.
 Functions defined with ``async def`` syntax are always coroutine functions,
 even if they do not contain ``await`` or ``async`` keywords.
 
-It is a :exc:`SyntaxError` to use :keyword:`yield` expressions in
+It is a :exc:`SyntaxError` to use ``yield from`` expressions in
 ``async def`` coroutines.
 
 An example of a coroutine function::
@@ -726,7 +733,7 @@ The following code::
 Is semantically equivalent to::
 
     iter = (ITER)
-    iter = await type(iter).__aiter__(iter)
+    iter = type(iter).__aiter__(iter)
     running = True
     while running:
         try:

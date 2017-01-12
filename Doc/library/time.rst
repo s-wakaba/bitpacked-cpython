@@ -4,6 +4,7 @@
 .. module:: time
    :synopsis: Time access and conversions.
 
+--------------
 
 This module provides various time-related functions. For related
 functionality, see also the :mod:`datetime` and :mod:`calendar` modules.
@@ -81,6 +82,10 @@ An explanation of some terminology and conventions is in order.
      The :class:`struct_time` type was extended to provide the :attr:`tm_gmtoff`
      and :attr:`tm_zone` attributes when platform supports corresponding
      ``struct tm`` members.
+
+  .. versionchanged:: 3.6
+     The :class:`struct_time` attributes :attr:`tm_gmtoff` and :attr:`tm_zone`
+     are now available on all platforms.
 
 * Use the following functions to convert between time representations:
 
@@ -555,17 +560,15 @@ The module defines the following functions and data items:
    +-------+-------------------+---------------------------------+
 
    Note that unlike the C structure, the month value is a range of [1, 12], not
-   [0, 11].  A ``-1`` argument as the daylight
-   savings flag, passed to :func:`mktime` will usually result in the correct
-   daylight savings state to be filled in.
+   [0, 11].
+
+   In calls to :func:`mktime`, :attr:`tm_isdst` may be set to 1 when daylight
+   savings time is in effect, and 0 when it is not.  A value of -1 indicates that
+   this is not known, and will usually result in the correct state being filled in.
 
    When a tuple with an incorrect length is passed to a function expecting a
    :class:`struct_time`, or having elements of the wrong type, a
    :exc:`TypeError` is raised.
-
-  .. versionchanged:: 3.3
-     :attr:`tm_gmtoff` and :attr:`tm_zone` attributes are available on platforms
-     with C library supporting the corresponding fields in ``struct tm``.
 
 .. function:: time()
 
@@ -634,11 +637,11 @@ The module defines the following functions and data items:
          it is possible to refer to February 29.
 
       :samp:`M{m}.{n}.{d}`
-         The *d*'th day (0 <= *d* <= 6) or week *n* of month *m* of the year (1
+         The *d*'th day (0 <= *d* <= 6) of week *n* of month *m* of the year (1
          <= *n* <= 5, 1 <= *m* <= 12, where week 5 means "the last *d* day in
          month *m*" which may occur in either the fourth or the fifth
          week). Week 1 is the first week in which the *d*'th day occurs. Day
-         zero is Sunday.
+         zero is a Sunday.
 
       ``time`` has the same format as ``offset`` except that no leading sign
       ('-' or '+') is allowed. The default, if time is not given, is 02:00:00.

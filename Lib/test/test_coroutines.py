@@ -69,55 +69,130 @@ def silence_coro_gc():
 class AsyncBadSyntaxTest(unittest.TestCase):
 
     def test_badsyntax_1(self):
-        with self.assertRaisesRegex(SyntaxError, "'await' outside"):
-            import test.badsyntax_async1
-
-    def test_badsyntax_2(self):
-        with self.assertRaisesRegex(SyntaxError, "'await' outside"):
-            import test.badsyntax_async2
-
-    def test_badsyntax_3(self):
-        with self.assertRaisesRegex(SyntaxError, 'invalid syntax'):
-            import test.badsyntax_async3
-
-    def test_badsyntax_4(self):
-        with self.assertRaisesRegex(SyntaxError, 'invalid syntax'):
-            import test.badsyntax_async4
-
-    def test_badsyntax_5(self):
-        with self.assertRaisesRegex(SyntaxError, 'invalid syntax'):
-            import test.badsyntax_async5
-
-    def test_badsyntax_6(self):
-        with self.assertRaisesRegex(
-            SyntaxError, "'yield' inside async function"):
-
-            import test.badsyntax_async6
-
-    def test_badsyntax_7(self):
-        with self.assertRaisesRegex(
-            SyntaxError, "'yield from' inside async function"):
-
-            import test.badsyntax_async7
-
-    def test_badsyntax_8(self):
-        with self.assertRaisesRegex(SyntaxError, 'invalid syntax'):
-            import test.badsyntax_async8
-
-    def test_badsyntax_9(self):
-        ns = {}
-        for comp in {'(await a for a in b)',
-                     '[await a for a in b]',
-                     '{await a for a in b}',
-                     '{await a: c for a in b}'}:
-
-            with self.assertRaisesRegex(SyntaxError, 'await.*in comprehen'):
-                exec('async def f():\n\t{}'.format(comp), ns, ns)
-
-    def test_badsyntax_10(self):
-        # Tests for issue 24619
-
         samples = [
+            """def foo():
+                await something()
+            """,
+
+            """await something()""",
+
+            """async def foo():
+                yield from []
+            """,
+
+            """async def foo():
+                await await fut
+            """,
+
+            """async def foo(a=await something()):
+                pass
+            """,
+
+            """async def foo(a:await something()):
+                pass
+            """,
+
+            """async def foo():
+                def bar():
+                 [i async for i in els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [await i for i in els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els
+                    async for b in els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els
+                    for c in b
+                    async for b in els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els
+                    async for b in els
+                    for c in b]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els
+                    for b in await els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els
+                    for b in els
+                        if await b]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in await els]
+            """,
+
+            """async def foo():
+                def bar():
+                 [i for i in els if await i]
+            """,
+
+            """def bar():
+                 [i async for i in els]
+            """,
+
+            """def bar():
+                 [await i for i in els]
+            """,
+
+            """def bar():
+                 [i for i in els
+                    async for b in els]
+            """,
+
+            """def bar():
+                 [i for i in els
+                    for c in b
+                    async for b in els]
+            """,
+
+            """def bar():
+                 [i for i in els
+                    async for b in els
+                    for c in b]
+            """,
+
+            """def bar():
+                 [i for i in els
+                    for b in await els]
+            """,
+
+            """def bar():
+                 [i for i in els
+                    for b in els
+                        if await b]
+            """,
+
+            """def bar():
+                 [i for i in await els]
+            """,
+
+            """def bar():
+                 [i for i in els if await i]
+            """,
+
+            """async def foo():
+                await
+            """,
+
             """async def foo():
                    def bar(): pass
                    await = 1
@@ -283,57 +358,110 @@ class AsyncBadSyntaxTest(unittest.TestCase):
             with self.subTest(code=code), self.assertRaises(SyntaxError):
                 compile(code, "<test>", "exec")
 
+    def test_badsyntax_2(self):
+        samples = [
+            """def foo():
+                await = 1
+            """,
+
+            """class Bar:
+                def async(): pass
+            """,
+
+            """class Bar:
+                async = 1
+            """,
+
+            """class async:
+                pass
+            """,
+
+            """class await:
+                pass
+            """,
+
+            """import math as await""",
+
+            """def async():
+                pass""",
+
+            """def foo(*, await=1):
+                pass"""
+
+            """async = 1""",
+
+            """print(await=1)"""
+        ]
+
+        for code in samples:
+            with self.subTest(code=code), self.assertWarnsRegex(
+                    DeprecationWarning,
+                    "'await' will become reserved keywords"):
+                compile(code, "<test>", "exec")
+
+    def test_badsyntax_3(self):
+        with self.assertRaises(DeprecationWarning):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                compile("async = 1", "<test>", "exec")
+
     def test_goodsyntax_1(self):
         # Tests for issue 24619
 
-        def foo(await):
-            async def foo(): pass
-            async def foo():
-                pass
-            return await + 1
-        self.assertEqual(foo(10), 11)
+        samples = [
+            '''def foo(await):
+                async def foo(): pass
+                async def foo():
+                    pass
+                return await + 1
+            ''',
 
-        def foo(await):
-            async def foo(): pass
-            async def foo(): pass
-            return await + 2
-        self.assertEqual(foo(20), 22)
+            '''def foo(await):
+                async def foo(): pass
+                async def foo(): pass
+                return await + 1
+            ''',
 
-        def foo(await):
+            '''def foo(await):
 
-            async def foo(): pass
+                async def foo(): pass
 
-            async def foo(): pass
+                async def foo(): pass
 
-            return await + 2
-        self.assertEqual(foo(20), 22)
+                return await + 1
+            ''',
 
-        def foo(await):
-            """spam"""
-            async def foo(): \
-                pass
-            # 123
-            async def foo(): pass
-            # 456
-            return await + 2
-        self.assertEqual(foo(20), 22)
+            '''def foo(await):
+                """spam"""
+                async def foo(): \
+                    pass
+                # 123
+                async def foo(): pass
+                # 456
+                return await + 1
+            ''',
 
-        def foo(await):
-            def foo(): pass
-            def foo(): pass
-            async def bar(): return await_
-            await_ = await
-            try:
-                bar().send(None)
-            except StopIteration as ex:
-                return ex.args[0]
-        self.assertEqual(foo(42), 42)
+            '''def foo(await):
+                def foo(): pass
+                def foo(): pass
+                async def bar(): return await_
+                await_ = await
+                try:
+                    bar().send(None)
+                except StopIteration as ex:
+                    return ex.args[0] + 1
+            '''
+        ]
 
-        async def f():
-            async def g(): pass
-            await z
-        await = 1
-        self.assertTrue(inspect.iscoroutinefunction(f))
+        for code in samples:
+            with self.subTest(code=code):
+                loc = {}
+
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    exec(code, loc, loc)
+
+                self.assertEqual(loc['foo'](10), 11)
 
 
 class TokenizerRegrTest(unittest.TestCase):
@@ -569,6 +697,162 @@ class CoroutineTest(unittest.TestCase):
                                     "coroutine ignored GeneratorExit"):
             c.close()
 
+    def test_func_15(self):
+        # See http://bugs.python.org/issue25887 for details
+
+        async def spammer():
+            return 'spam'
+        async def reader(coro):
+            return await coro
+
+        spammer_coro = spammer()
+
+        with self.assertRaisesRegex(StopIteration, 'spam'):
+            reader(spammer_coro).send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            reader(spammer_coro).send(None)
+
+    def test_func_16(self):
+        # See http://bugs.python.org/issue25887 for details
+
+        @types.coroutine
+        def nop():
+            yield
+        async def send():
+            await nop()
+            return 'spam'
+        async def read(coro):
+            await nop()
+            return await coro
+
+        spammer = send()
+
+        reader = read(spammer)
+        reader.send(None)
+        reader.send(None)
+        with self.assertRaisesRegex(Exception, 'ham'):
+            reader.throw(Exception('ham'))
+
+        reader = read(spammer)
+        reader.send(None)
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            reader.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            reader.throw(Exception('wat'))
+
+    def test_func_17(self):
+        # See http://bugs.python.org/issue25887 for details
+
+        async def coroutine():
+            return 'spam'
+
+        coro = coroutine()
+        with self.assertRaisesRegex(StopIteration, 'spam'):
+            coro.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            coro.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            coro.throw(Exception('wat'))
+
+        # Closing a coroutine shouldn't raise any exception even if it's
+        # already closed/exhausted (similar to generators)
+        coro.close()
+        coro.close()
+
+    def test_func_18(self):
+        # See http://bugs.python.org/issue25887 for details
+
+        async def coroutine():
+            return 'spam'
+
+        coro = coroutine()
+        await_iter = coro.__await__()
+        it = iter(await_iter)
+
+        with self.assertRaisesRegex(StopIteration, 'spam'):
+            it.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            it.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            # Although the iterator protocol requires iterators to
+            # raise another StopIteration here, we don't want to do
+            # that.  In this particular case, the iterator will raise
+            # a RuntimeError, so that 'yield from' and 'await'
+            # expressions will trigger the error, instead of silently
+            # ignoring the call.
+            next(it)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            it.throw(Exception('wat'))
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    'cannot reuse already awaited coroutine'):
+            it.throw(Exception('wat'))
+
+        # Closing a coroutine shouldn't raise any exception even if it's
+        # already closed/exhausted (similar to generators)
+        it.close()
+        it.close()
+
+    def test_func_19(self):
+        CHK = 0
+
+        @types.coroutine
+        def foo():
+            nonlocal CHK
+            yield
+            try:
+                yield
+            except GeneratorExit:
+                CHK += 1
+
+        async def coroutine():
+            await foo()
+
+        coro = coroutine()
+
+        coro.send(None)
+        coro.send(None)
+
+        self.assertEqual(CHK, 0)
+        coro.close()
+        self.assertEqual(CHK, 1)
+
+        for _ in range(3):
+            # Closing a coroutine shouldn't raise any exception even if it's
+            # already closed/exhausted (similar to generators)
+            coro.close()
+            self.assertEqual(CHK, 1)
+
+    def test_coro_wrapper_send_tuple(self):
+        async def foo():
+            return (10,)
+
+        result = run_async__await__(foo())
+        self.assertEqual(result, ([], (10,)))
+
+    def test_coro_wrapper_send_stop_iterator(self):
+        async def foo():
+            return StopIteration(10)
+
+        result = run_async__await__(foo())
+        self.assertIsInstance(result[1], StopIteration)
+        self.assertEqual(result[1].value, 10)
+
     def test_cr_await(self):
         @types.coroutine
         def a():
@@ -750,7 +1034,7 @@ class CoroutineTest(unittest.TestCase):
             return await Awaitable()
 
         with self.assertRaisesRegex(
-            TypeError, "__await__\(\) returned a coroutine"):
+            TypeError, r"__await__\(\) returned a coroutine"):
 
             run_async(foo())
 
@@ -800,6 +1084,24 @@ class CoroutineTest(unittest.TestCase):
         c.send(None)
         with self.assertRaises(Marker):
             c.throw(ZeroDivisionError)
+
+    def test_await_15(self):
+        @types.coroutine
+        def nop():
+            yield
+
+        async def coroutine():
+            await nop()
+
+        async def waiter(coro):
+            await coro
+
+        coro = coroutine()
+        coro.send(None)
+
+        with self.assertRaisesRegex(RuntimeError,
+                                    "coroutine is being awaited already"):
+            waiter(coro).send(None)
 
     def test_with_1(self):
         class Manager:
@@ -1096,8 +1398,9 @@ class CoroutineTest(unittest.TestCase):
 
         buffer = []
         async def test1():
-            async for i1, i2 in AsyncIter():
-                buffer.append(i1 + i2)
+            with self.assertWarnsRegex(DeprecationWarning, "legacy"):
+                async for i1, i2 in AsyncIter():
+                    buffer.append(i1 + i2)
 
         yielded, _ = run_async(test1())
         # Make sure that __aiter__ was called only once
@@ -1109,12 +1412,13 @@ class CoroutineTest(unittest.TestCase):
         buffer = []
         async def test2():
             nonlocal buffer
-            async for i in AsyncIter():
-                buffer.append(i[0])
-                if i[0] == 20:
-                    break
-            else:
-                buffer.append('what?')
+            with self.assertWarnsRegex(DeprecationWarning, "legacy"):
+                async for i in AsyncIter():
+                    buffer.append(i[0])
+                    if i[0] == 20:
+                        break
+                else:
+                    buffer.append('what?')
             buffer.append('end')
 
         yielded, _ = run_async(test2())
@@ -1127,12 +1431,13 @@ class CoroutineTest(unittest.TestCase):
         buffer = []
         async def test3():
             nonlocal buffer
-            async for i in AsyncIter():
-                if i[0] > 20:
-                    continue
-                buffer.append(i[0])
-            else:
-                buffer.append('what?')
+            with self.assertWarnsRegex(DeprecationWarning, "legacy"):
+                async for i in AsyncIter():
+                    if i[0] > 20:
+                        continue
+                    buffer.append(i[0])
+                else:
+                    buffer.append('what?')
             buffer.append('end')
 
         yielded, _ = run_async(test3())
@@ -1171,7 +1476,7 @@ class CoroutineTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
                 TypeError,
-                "async for' received an invalid object.*__aiter.*\: I"):
+                r"async for' received an invalid object.*__aiter.*\: I"):
 
             run_async(foo())
 
@@ -1179,7 +1484,7 @@ class CoroutineTest(unittest.TestCase):
 
     def test_for_4(self):
         class I:
-            async def __aiter__(self):
+            def __aiter__(self):
                 return self
 
             def __anext__(self):
@@ -1209,8 +1514,9 @@ class CoroutineTest(unittest.TestCase):
                 return 123
 
         async def foo():
-            async for i in I():
-                print('never going to happen')
+            with self.assertWarnsRegex(DeprecationWarning, "legacy"):
+                async for i in I():
+                    print('never going to happen')
 
         with self.assertRaisesRegex(
                 TypeError,
@@ -1234,7 +1540,7 @@ class CoroutineTest(unittest.TestCase):
             def __init__(self):
                 self.i = 0
 
-            async def __aiter__(self):
+            def __aiter__(self):
                 return self
 
             async def __anext__(self):
@@ -1258,7 +1564,11 @@ class CoroutineTest(unittest.TestCase):
                     I += 1
             I += 1000
 
-        run_async(main())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # Test that __aiter__ that returns an asynchronous iterator
+            # directly does not throw any warnings.
+            run_async(main())
         self.assertEqual(I, 111011)
 
         self.assertEqual(sys.getrefcount(manager), mrefs_before)
@@ -1313,12 +1623,287 @@ class CoroutineTest(unittest.TestCase):
                 1/0
         async def foo():
             nonlocal CNT
-            async for i in AI():
-                CNT += 1
+            with self.assertWarnsRegex(DeprecationWarning, "legacy"):
+                async for i in AI():
+                    CNT += 1
             CNT += 10
         with self.assertRaises(ZeroDivisionError):
             run_async(foo())
         self.assertEqual(CNT, 0)
+
+    def test_for_8(self):
+        CNT = 0
+        class AI:
+            def __aiter__(self):
+                1/0
+        async def foo():
+            nonlocal CNT
+            async for i in AI():
+                CNT += 1
+            CNT += 10
+        with self.assertRaises(ZeroDivisionError):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                # Test that if __aiter__ raises an exception it propagates
+                # without any kind of warning.
+                run_async(foo())
+        self.assertEqual(CNT, 0)
+
+    def test_for_9(self):
+        # Test that DeprecationWarning can safely be converted into
+        # an exception (__aiter__ should not have a chance to raise
+        # a ZeroDivisionError.)
+        class AI:
+            async def __aiter__(self):
+                1/0
+        async def foo():
+            async for i in AI():
+                pass
+
+        with self.assertRaises(DeprecationWarning):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                run_async(foo())
+
+    def test_for_10(self):
+        # Test that DeprecationWarning can safely be converted into
+        # an exception.
+        class AI:
+            async def __aiter__(self):
+                pass
+        async def foo():
+            async for i in AI():
+                pass
+
+        with self.assertRaises(DeprecationWarning):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                run_async(foo())
+
+    def test_for_tuple(self):
+        class Done(Exception): pass
+
+        class AIter(tuple):
+            i = 0
+            def __aiter__(self):
+                return self
+            async def __anext__(self):
+                if self.i >= len(self):
+                    raise StopAsyncIteration
+                self.i += 1
+                return self[self.i - 1]
+
+        result = []
+        async def foo():
+            async for i in AIter([42]):
+                result.append(i)
+            raise Done
+
+        with self.assertRaises(Done):
+            foo().send(None)
+        self.assertEqual(result, [42])
+
+    def test_for_stop_iteration(self):
+        class Done(Exception): pass
+
+        class AIter(StopIteration):
+            i = 0
+            def __aiter__(self):
+                return self
+            async def __anext__(self):
+                if self.i:
+                    raise StopAsyncIteration
+                self.i += 1
+                return self.value
+
+        result = []
+        async def foo():
+            async for i in AIter(42):
+                result.append(i)
+            raise Done
+
+        with self.assertRaises(Done):
+            foo().send(None)
+        self.assertEqual(result, [42])
+
+    def test_comp_1(self):
+        async def f(i):
+            return i
+
+        async def run_list():
+            return [await c for c in [f(1), f(41)]]
+
+        async def run_set():
+            return {await c for c in [f(1), f(41)]}
+
+        async def run_dict1():
+            return {await c: 'a' for c in [f(1), f(41)]}
+
+        async def run_dict2():
+            return {i: await c for i, c in enumerate([f(1), f(41)])}
+
+        self.assertEqual(run_async(run_list()), ([], [1, 41]))
+        self.assertEqual(run_async(run_set()), ([], {1, 41}))
+        self.assertEqual(run_async(run_dict1()), ([], {1: 'a', 41: 'a'}))
+        self.assertEqual(run_async(run_dict2()), ([], {0: 1, 1: 41}))
+
+    def test_comp_2(self):
+        async def f(i):
+            return i
+
+        async def run_list():
+            return [s for c in [f(''), f('abc'), f(''), f(['de', 'fg'])]
+                    for s in await c]
+
+        self.assertEqual(
+            run_async(run_list()),
+            ([], ['a', 'b', 'c', 'de', 'fg']))
+
+        async def run_set():
+            return {d
+                    for c in [f([f([10, 30]),
+                                 f([20])])]
+                    for s in await c
+                    for d in await s}
+
+        self.assertEqual(
+            run_async(run_set()),
+            ([], {10, 20, 30}))
+
+        async def run_set2():
+            return {await s
+                    for c in [f([f(10), f(20)])]
+                    for s in await c}
+
+        self.assertEqual(
+            run_async(run_set2()),
+            ([], {10, 20}))
+
+    def test_comp_3(self):
+        async def f(it):
+            for i in it:
+                yield i
+
+        async def run_list():
+            return [i + 1 async for i in f([10, 20])]
+        self.assertEqual(
+            run_async(run_list()),
+            ([], [11, 21]))
+
+        async def run_set():
+            return {i + 1 async for i in f([10, 20])}
+        self.assertEqual(
+            run_async(run_set()),
+            ([], {11, 21}))
+
+        async def run_dict():
+            return {i + 1: i + 2 async for i in f([10, 20])}
+        self.assertEqual(
+            run_async(run_dict()),
+            ([], {11: 12, 21: 22}))
+
+        async def run_gen():
+            gen = (i + 1 async for i in f([10, 20]))
+            return [g + 100 async for g in gen]
+        self.assertEqual(
+            run_async(run_gen()),
+            ([], [111, 121]))
+
+    def test_comp_4(self):
+        async def f(it):
+            for i in it:
+                yield i
+
+        async def run_list():
+            return [i + 1 async for i in f([10, 20]) if i > 10]
+        self.assertEqual(
+            run_async(run_list()),
+            ([], [21]))
+
+        async def run_set():
+            return {i + 1 async for i in f([10, 20]) if i > 10}
+        self.assertEqual(
+            run_async(run_set()),
+            ([], {21}))
+
+        async def run_dict():
+            return {i + 1: i + 2 async for i in f([10, 20]) if i > 10}
+        self.assertEqual(
+            run_async(run_dict()),
+            ([], {21: 22}))
+
+        async def run_gen():
+            gen = (i + 1 async for i in f([10, 20]) if i > 10)
+            return [g + 100 async for g in gen]
+        self.assertEqual(
+            run_async(run_gen()),
+            ([], [121]))
+
+    def test_comp_5(self):
+        async def f(it):
+            for i in it:
+                yield i
+
+        async def run_list():
+            return [i + 1 for pair in ([10, 20], [30, 40]) if pair[0] > 10
+                    async for i in f(pair) if i > 30]
+        self.assertEqual(
+            run_async(run_list()),
+            ([], [41]))
+
+    def test_comp_6(self):
+        async def f(it):
+            for i in it:
+                yield i
+
+        async def run_list():
+            return [i + 1 async for seq in f([(10, 20), (30,)])
+                    for i in seq]
+
+        self.assertEqual(
+            run_async(run_list()),
+            ([], [11, 21, 31]))
+
+    def test_comp_7(self):
+        async def f():
+            yield 1
+            yield 2
+            raise Exception('aaa')
+
+        async def run_list():
+            return [i async for i in f()]
+
+        with self.assertRaisesRegex(Exception, 'aaa'):
+            run_async(run_list())
+
+    def test_comp_8(self):
+        async def f():
+            return [i for i in [1, 2, 3]]
+
+        self.assertEqual(
+            run_async(f()),
+            ([], [1, 2, 3]))
+
+    def test_comp_9(self):
+        async def gen():
+            yield 1
+            yield 2
+        async def f():
+            l = [i async for i in gen()]
+            return [i for i in l]
+
+        self.assertEqual(
+            run_async(f()),
+            ([], [1, 2]))
+
+    def test_comp_10(self):
+        async def f():
+            xx = {i for i in [1, 2, 3]}
+            return {x: x for x in xx}
+
+        self.assertEqual(
+            run_async(f()),
+            ([], {1: 1, 2: 2, 3: 3}))
 
     def test_copy(self):
         async def func(): pass
@@ -1347,6 +1932,15 @@ class CoroutineTest(unittest.TestCase):
                     pickle.dumps(aw, proto)
         finally:
             aw.close()
+
+    def test_fatal_coro_warning(self):
+        # Issue 27811
+        async def func(): pass
+        with warnings.catch_warnings(), support.captured_stderr() as stderr:
+            warnings.filterwarnings("error")
+            func()
+            support.gc_collect()
+        self.assertIn("was never awaited", stderr.getvalue())
 
 
 class CoroAsyncIOCompatTest(unittest.TestCase):
@@ -1441,8 +2035,8 @@ class SysSetCoroWrapperTest(unittest.TestCase):
         try:
             with silence_coro_gc(), self.assertRaisesRegex(
                 RuntimeError,
-                "coroutine wrapper.*\.wrapper at 0x.*attempted to "
-                "recursively wrap .* wrap .*"):
+                r"coroutine wrapper.*\.wrapper at 0x.*attempted to "
+                r"recursively wrap .* wrap .*"):
 
                 foo()
         finally:

@@ -12,11 +12,13 @@ import os
 import sys
 import re
 import base64
+import ntpath
 import shutil
 import urllib.parse
 import html
 import http.client
 import tempfile
+import time
 from io import BytesIO
 
 import unittest
@@ -98,7 +100,7 @@ class BaseHTTPServerTestCase(BaseTestCase):
 
         def do_EXPLAINERROR(self):
             self.send_error(999, "Short Message",
-                            "This is a long \n explaination")
+                            "This is a long \n explanation")
 
         def do_CUSTOM(self):
             self.send_response(999)
@@ -113,6 +115,12 @@ class BaseHTTPServerTestCase(BaseTestCase):
             self.end_headers()
             body = self.headers['x-special-incoming'].encode('utf-8')
             self.wfile.write(body)
+
+        def do_SEND_ERROR(self):
+            self.send_error(int(self.path[1:]))
+
+        def do_HEAD(self):
+            self.send_error(int(self.path[1:]))
 
     def setUp(self):
         BaseTestCase.setUp(self)
@@ -182,7 +190,7 @@ class BaseHTTPServerTestCase(BaseTestCase):
         res = self.con.getresponse()
         self.assertEqual(res.status, HTTPStatus.NOT_IMPLEMENTED)
 
-    def test_head_keep_alive(self):
+    def test_header_keep_alive(self):
         self.con._http_vsn_str = 'HTTP/1.1'
         self.con.putrequest('GET', '/')
         self.con.putheader('Connection', 'keep-alive')
@@ -235,6 +243,44 @@ class BaseHTTPServerTestCase(BaseTestCase):
         data = res.read()
         self.assertEqual(int(res.getheader('Content-Length')), len(data))
 
+    def test_send_error(self):
+        allow_transfer_encoding_codes = (HTTPStatus.NOT_MODIFIED,
+                                         HTTPStatus.RESET_CONTENT)
+        for code in (HTTPStatus.NO_CONTENT, HTTPStatus.NOT_MODIFIED,
+                     HTTPStatus.PROCESSING, HTTPStatus.RESET_CONTENT,
+                     HTTPStatus.SWITCHING_PROTOCOLS):
+            self.con.request('SEND_ERROR', '/{}'.format(code))
+            res = self.con.getresponse()
+            self.assertEqual(code, res.status)
+            self.assertEqual(None, res.getheader('Content-Length'))
+            self.assertEqual(None, res.getheader('Content-Type'))
+            if code not in allow_transfer_encoding_codes:
+                self.assertEqual(None, res.getheader('Transfer-Encoding'))
+
+            data = res.read()
+            self.assertEqual(b'', data)
+
+    def test_head_via_send_error(self):
+        allow_transfer_encoding_codes = (HTTPStatus.NOT_MODIFIED,
+                                         HTTPStatus.RESET_CONTENT)
+        for code in (HTTPStatus.OK, HTTPStatus.NO_CONTENT,
+                     HTTPStatus.NOT_MODIFIED, HTTPStatus.RESET_CONTENT,
+                     HTTPStatus.SWITCHING_PROTOCOLS):
+            self.con.request('HEAD', '/{}'.format(code))
+            res = self.con.getresponse()
+            self.assertEqual(code, res.status)
+            if code == HTTPStatus.OK:
+                self.assertTrue(int(res.getheader('Content-Length')) > 0)
+                self.assertIn('text/html', res.getheader('Content-Type'))
+            else:
+                self.assertEqual(None, res.getheader('Content-Length'))
+                self.assertEqual(None, res.getheader('Content-Type'))
+            if code not in allow_transfer_encoding_codes:
+                self.assertEqual(None, res.getheader('Transfer-Encoding'))
+
+            data = res.read()
+            self.assertEqual(b'', data)
+
 
 class RequestHandlerLoggingTestCase(BaseTestCase):
     class request_handler(BaseHTTPRequestHandler):
@@ -284,6 +330,7 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         self.data = b'We are the knights who say Ni!'
         self.tempdir = tempfile.mkdtemp(dir=basetempdir)
         self.tempdir_name = os.path.basename(self.tempdir)
+        self.base_url = '/' + self.tempdir_name
         with open(os.path.join(self.tempdir, 'test'), 'wb') as temp:
             temp.write(self.data)
 
@@ -323,6 +370,8 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         return body
 
     @support.requires_mac_ver(10, 5)
+    @unittest.skipIf(sys.platform == 'win32',
+                     'undecodable name cannot be decoded on win32')
     @unittest.skipUnless(support.TESTFN_UNDECODABLE,
                          'need support.TESTFN_UNDECODABLE')
     def test_undecodable_filename(self):
@@ -330,7 +379,7 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         filename = os.fsdecode(support.TESTFN_UNDECODABLE) + '.txt'
         with open(os.path.join(self.tempdir, filename), 'wb') as f:
             f.write(support.TESTFN_UNDECODABLE)
-        response = self.request(self.tempdir_name + '/')
+        response = self.request(self.base_url + '/')
         if sys.platform == 'darwin':
             # On Mac OS the HFS+ filesystem replaces bytes that aren't valid
             # UTF-8 into a percent-encoded value.
@@ -342,29 +391,29 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         quotedname = urllib.parse.quote(filename, errors='surrogatepass')
         self.assertIn(('href="%s"' % quotedname)
                       .encode(enc, 'surrogateescape'), body)
-        self.assertIn(('>%s<' % html.escape(filename))
+        self.assertIn(('>%s<' % html.escape(filename, quote=False))
                       .encode(enc, 'surrogateescape'), body)
-        response = self.request(self.tempdir_name + '/' + quotedname)
+        response = self.request(self.base_url + '/' + quotedname)
         self.check_status_and_reason(response, HTTPStatus.OK,
                                      data=support.TESTFN_UNDECODABLE)
 
     def test_get(self):
         #constructs the path relative to the root directory of the HTTPServer
-        response = self.request(self.tempdir_name + '/test')
+        response = self.request(self.base_url + '/test')
         self.check_status_and_reason(response, HTTPStatus.OK, data=self.data)
         # check for trailing "/" which should return 404. See Issue17324
-        response = self.request(self.tempdir_name + '/test/')
+        response = self.request(self.base_url + '/test/')
         self.check_status_and_reason(response, HTTPStatus.NOT_FOUND)
-        response = self.request(self.tempdir_name + '/')
+        response = self.request(self.base_url + '/')
         self.check_status_and_reason(response, HTTPStatus.OK)
-        response = self.request(self.tempdir_name)
+        response = self.request(self.base_url)
         self.check_status_and_reason(response, HTTPStatus.MOVED_PERMANENTLY)
-        response = self.request(self.tempdir_name + '/?hi=2')
+        response = self.request(self.base_url + '/?hi=2')
         self.check_status_and_reason(response, HTTPStatus.OK)
-        response = self.request(self.tempdir_name + '?hi=1')
+        response = self.request(self.base_url + '?hi=1')
         self.check_status_and_reason(response, HTTPStatus.MOVED_PERMANENTLY)
         self.assertEqual(response.getheader("Location"),
-                         self.tempdir_name + "/?hi=1")
+                         self.base_url + "/?hi=1")
         response = self.request('/ThisDoesNotExist')
         self.check_status_and_reason(response, HTTPStatus.NOT_FOUND)
         response = self.request('/' + 'ThisDoesNotExist' + '/')
@@ -373,7 +422,7 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         data = b"Dummy index file\r\n"
         with open(os.path.join(self.tempdir_name, 'index.html'), 'wb') as f:
             f.write(data)
-        response = self.request('/' + self.tempdir_name + '/')
+        response = self.request(self.base_url + '/')
         self.check_status_and_reason(response, HTTPStatus.OK, data)
 
         # chmod() doesn't work as expected on Windows, and filesystem
@@ -381,14 +430,14 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         if os.name == 'posix' and os.geteuid() != 0:
             os.chmod(self.tempdir, 0)
             try:
-                response = self.request(self.tempdir_name + '/')
+                response = self.request(self.base_url + '/')
                 self.check_status_and_reason(response, HTTPStatus.NOT_FOUND)
             finally:
                 os.chmod(self.tempdir, 0o755)
 
     def test_head(self):
         response = self.request(
-            self.tempdir_name + '/test', method='HEAD')
+            self.base_url + '/test', method='HEAD')
         self.check_status_and_reason(response, HTTPStatus.OK)
         self.assertEqual(response.getheader('content-length'),
                          str(len(self.data)))
@@ -403,6 +452,43 @@ class SimpleHTTPServerTestCase(BaseTestCase):
         self.check_status_and_reason(response, HTTPStatus.NOT_IMPLEMENTED)
         response = self.request('/', method='GETs')
         self.check_status_and_reason(response, HTTPStatus.NOT_IMPLEMENTED)
+
+    def test_path_without_leading_slash(self):
+        response = self.request(self.tempdir_name + '/test')
+        self.check_status_and_reason(response, HTTPStatus.OK, data=self.data)
+        response = self.request(self.tempdir_name + '/test/')
+        self.check_status_and_reason(response, HTTPStatus.NOT_FOUND)
+        response = self.request(self.tempdir_name + '/')
+        self.check_status_and_reason(response, HTTPStatus.OK)
+        response = self.request(self.tempdir_name)
+        self.check_status_and_reason(response, HTTPStatus.MOVED_PERMANENTLY)
+        response = self.request(self.tempdir_name + '/?hi=2')
+        self.check_status_and_reason(response, HTTPStatus.OK)
+        response = self.request(self.tempdir_name + '?hi=1')
+        self.check_status_and_reason(response, HTTPStatus.MOVED_PERMANENTLY)
+        self.assertEqual(response.getheader("Location"),
+                         self.tempdir_name + "/?hi=1")
+
+    def test_html_escape_filename(self):
+        filename = '<test&>.txt'
+        fullpath = os.path.join(self.tempdir, filename)
+
+        try:
+            open(fullpath, 'w').close()
+        except OSError:
+            raise unittest.SkipTest('Can not create file %s on current file '
+                                    'system' % filename)
+
+        try:
+            response = self.request(self.base_url + '/')
+            body = self.check_status_and_reason(response, HTTPStatus.OK)
+            enc = response.headers.get_content_charset()
+        finally:
+            os.unlink(fullpath)  # avoid affecting test_undecodable_filename
+
+        self.assertIsNotNone(enc)
+        html_text = '>%s<' % html.escape(filename, quote=False)
+        self.assertIn(html_text.encode(enc), body)
 
 
 cgi_file1 = """\
@@ -854,9 +940,23 @@ class BaseHTTPRequestHandlerTestCase(unittest.TestCase):
         # Issue #6791: same for headers
         result = self.send_typical_request(
             b'GET / HTTP/1.1\r\nX-Foo: bar' + b'r' * 65537 + b'\r\n\r\n')
-        self.assertEqual(result[0], b'HTTP/1.1 400 Line too long\r\n')
+        self.assertEqual(result[0], b'HTTP/1.1 431 Line too long\r\n')
         self.assertFalse(self.handler.get_called)
         self.assertEqual(self.handler.requestline, 'GET / HTTP/1.1')
+
+    def test_too_many_headers(self):
+        result = self.send_typical_request(
+            b'GET / HTTP/1.1\r\n' + b'X-Foo: bar\r\n' * 101 + b'\r\n')
+        self.assertEqual(result[0], b'HTTP/1.1 431 Too many headers\r\n')
+        self.assertFalse(self.handler.get_called)
+        self.assertEqual(self.handler.requestline, 'GET / HTTP/1.1')
+
+    def test_html_escape_on_error(self):
+        result = self.send_typical_request(
+            b'<script>alert("hello")</script> / HTTP/1.1')
+        result = b''.join(result)
+        text = '<script>alert("hello")</script>'
+        self.assertIn(html.escape(text, quote=False).encode('ascii'), result)
 
     def test_close_connection(self):
         # handle_one_request() should be repeatedly called until
@@ -872,6 +972,19 @@ class BaseHTTPRequestHandlerTestCase(unittest.TestCase):
         close_values = iter((False, False, True))
         self.handler.handle()
         self.assertRaises(StopIteration, next, close_values)
+
+    def test_date_time_string(self):
+        now = time.time()
+        # this is the old code that formats the timestamp
+        year, month, day, hh, mm, ss, wd, y, z = time.gmtime(now)
+        expected = "%s, %02d %3s %4d %02d:%02d:%02d GMT" % (
+            self.handler.weekdayname[wd],
+            day,
+            self.handler.monthname[month],
+            year, hh, mm, ss
+        )
+        self.assertEqual(self.handler.date_time_string(timestamp=now), expected)
+
 
 class SimpleHTTPRequestHandlerTestCase(unittest.TestCase):
     """ Test url parsing """
@@ -893,6 +1006,24 @@ class SimpleHTTPRequestHandlerTestCase(unittest.TestCase):
         self.assertEqual(path, self.translated)
         path = self.handler.translate_path('//filename?foo=bar')
         self.assertEqual(path, self.translated)
+
+    def test_windows_colon(self):
+        with support.swap_attr(server.os, 'path', ntpath):
+            path = self.handler.translate_path('c:c:c:foo/filename')
+            path = path.replace(ntpath.sep, os.sep)
+            self.assertEqual(path, self.translated)
+
+            path = self.handler.translate_path('\\c:../filename')
+            path = path.replace(ntpath.sep, os.sep)
+            self.assertEqual(path, self.translated)
+
+            path = self.handler.translate_path('c:\\c:..\\foo/filename')
+            path = path.replace(ntpath.sep, os.sep)
+            self.assertEqual(path, self.translated)
+
+            path = self.handler.translate_path('c:c:foo\\c:c:bar/filename')
+            path = path.replace(ntpath.sep, os.sep)
+            self.assertEqual(path, self.translated)
 
 
 class MiscTestCase(unittest.TestCase):

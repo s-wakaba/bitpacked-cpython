@@ -158,7 +158,7 @@ are always available.  They are listed here in alphabetical order.
 
    Return the string representing a character whose Unicode code point is the
    integer *i*.  For example, ``chr(97)`` returns the string ``'a'``, while
-   ``chr(957)`` returns the string ``'ν'``. This is the inverse of :func:`ord`.
+   ``chr(8364)`` returns the string ``'€'``. This is the inverse of :func:`ord`.
 
    The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in
    base 16).  :exc:`ValueError` will be raised if *i* is outside that range.
@@ -230,7 +230,7 @@ are always available.  They are listed here in alphabetical order.
    or ``2`` (docstrings are removed too).
 
    This function raises :exc:`SyntaxError` if the compiled source is invalid,
-   and :exc:`TypeError` if the source contains null bytes.
+   and :exc:`ValueError` if the source contains null bytes.
 
    If you want to parse Python code into its AST representation, see
    :func:`ast.parse`.
@@ -245,6 +245,10 @@ are always available.  They are listed here in alphabetical order.
    .. versionchanged:: 3.2
       Allowed use of Windows and Mac newlines.  Also input in ``'exec'`` mode
       does not have to end in a newline anymore.  Added the *optimize* parameter.
+
+   .. versionchanged:: 3.5
+      Previously, :exc:`TypeError` was raised when null bytes were encountered
+      in *source*.
 
 
 .. class:: complex([real[, imag]])
@@ -266,6 +270,9 @@ are always available.  They are listed here in alphabetical order.
       :exc:`ValueError`.
 
    The complex type is described in :ref:`typesnumeric`.
+
+   .. versionchanged:: 3.6
+      Grouping digits with underscores as in code literals is allowed.
 
 
 .. function:: delattr(object, name)
@@ -300,7 +307,7 @@ are always available.  They are listed here in alphabetical order.
    :func:`dir` reports their attributes.
 
    If the object does not provide :meth:`__dir__`, the function tries its best to
-   gather information from the object's :attr:`__dict__` attribute, if defined, and
+   gather information from the object's :attr:`~object.__dict__` attribute, if defined, and
    from its type object.  The resulting list is not necessarily complete, and may
    be inaccurate when the object has a custom :func:`__getattr__`.
 
@@ -527,10 +534,13 @@ are always available.  They are listed here in alphabetical order.
 
    The float type is described in :ref:`typesnumeric`.
 
-   .. index::
-      single: __format__
-      single: string; format() (built-in function)
+   .. versionchanged:: 3.6
+      Grouping digits with underscores as in code literals is allowed.
 
+
+.. index::
+   single: __format__
+   single: string; format() (built-in function)
 
 .. function:: format(value[, format_spec])
 
@@ -682,7 +692,7 @@ are always available.  They are listed here in alphabetical order.
    preceded by ``+`` or ``-`` (with no space in between) and surrounded by
    whitespace.  A base-n literal consists of the digits 0 to n-1, with ``a``
    to ``z`` (or ``A`` to ``Z``) having
-   values 10 to 35.  The default *base* is 10. The allowed values are 0 and 2-36.
+   values 10 to 35.  The default *base* is 10. The allowed values are 0 and 2--36.
    Base-2, -8, and -16 literals can be optionally prefixed with ``0b``/``0B``,
    ``0o``/``0O``, or ``0x``/``0X``, as with integer literals in code.  Base 0
    means to interpret exactly as a code literal, so that the actual base is 2,
@@ -697,6 +707,10 @@ are always available.  They are listed here in alphabetical order.
       to obtain an integer for the base.  Previous versions used
       :meth:`base.__int__ <object.__int__>` instead of :meth:`base.__index__
       <object.__index__>`.
+
+   .. versionchanged:: 3.6
+      Grouping digits with underscores as in code literals is allowed.
+
 
 .. function:: isinstance(object, classinfo)
 
@@ -874,11 +888,11 @@ are always available.  They are listed here in alphabetical order.
    Open *file* and return a corresponding :term:`file object`.  If the file
    cannot be opened, an :exc:`OSError` is raised.
 
-   *file* is either a string or bytes object giving the pathname (absolute or
-   relative to the current working directory) of the file to be opened or
-   an integer file descriptor of the file to be wrapped.  (If a file descriptor
-   is given, it is closed when the returned I/O object is closed, unless
-   *closefd* is set to ``False``.)
+   *file* is a :term:`path-like object` giving the pathname (absolute or
+   relative to the current working directory) of the file to be opened or an
+   integer file descriptor of the file to be wrapped.  (If a file descriptor is
+   given, it is closed when the returned I/O object is closed, unless *closefd*
+   is set to ``False``.)
 
    *mode* is an optional string that specifies the mode in which the file is
    opened.  It defaults to ``'r'`` which means open for reading in text mode.
@@ -945,7 +959,7 @@ are always available.  They are listed here in alphabetical order.
    the list of supported encodings.
 
    *errors* is an optional string that specifies how encoding and decoding
-   errors are to be handled--this cannot be used in binary mode.
+   errors are to be handled—this cannot be used in binary mode.
    A variety of standard error handlers are available
    (listed under :ref:`error-handlers`), though any
    error handling name that has been registered with
@@ -1051,32 +1065,45 @@ are always available.  They are listed here in alphabetical order.
    (where :func:`open` is declared), :mod:`os`, :mod:`os.path`, :mod:`tempfile`,
    and :mod:`shutil`.
 
-   .. versionchanged:: 3.3
-      The *opener* parameter was added.
-      The ``'x'`` mode was added.
-      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
-      :exc:`FileExistsError` is now raised if the file opened in exclusive
-      creation mode (``'x'``) already exists.
+   .. versionchanged::
+      3.3
 
-   .. versionchanged:: 3.4
-      The file is now non-inheritable.
+         * The *opener* parameter was added.
+         * The ``'x'`` mode was added.
+         * :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
+         * :exc:`FileExistsError` is now raised if the file opened in exclusive
+         * creation mode (``'x'``) already exists.
+
+   .. versionchanged::
+      3.4
+
+         * The file is now non-inheritable.
 
    .. deprecated-removed:: 3.4 4.0
 
       The ``'U'`` mode.
 
-   .. versionchanged:: 3.5
-      If the system call is interrupted and the signal handler does not raise an
-      exception, the function now retries the system call instead of raising an
-      :exc:`InterruptedError` exception (see :pep:`475` for the rationale).
+   .. versionchanged::
+      3.5
 
+         * If the system call is interrupted and the signal handler does not raise an
+           exception, the function now retries the system call instead of raising an
+           :exc:`InterruptedError` exception (see :pep:`475` for the rationale).
+         * The ``'namereplace'`` error handler was added.
+
+   .. versionchanged::
+      3.6
+
+         * Support added to accept objects implementing :class:`os.PathLike`.
+         * On Windows, opening a console buffer may return a subclass of
+           :class:`io.RawIOBase` other than :class:`io.FileIO`.
 
 .. function:: ord(c)
 
    Given a string representing one Unicode character, return an integer
    representing the Unicode code point of that character.  For example,
-   ``ord('a')`` returns the integer ``97`` and ``ord('ν')`` returns ``957``.
-   This is the inverse of :func:`chr`.
+   ``ord('a')`` returns the integer ``97`` and ``ord('€')`` (Euro sign)
+   returns ``8364``.  This is the inverse of :func:`chr`.
 
 
 .. function:: pow(x, y[, z])
@@ -1228,8 +1255,8 @@ are always available.  They are listed here in alphabetical order.
 .. function:: round(number[, ndigits])
 
    Return the floating point value *number* rounded to *ndigits* digits after
-   the decimal point.  If *ndigits* is omitted, it returns the nearest integer
-   to its input.  Delegates to ``number.__round__(ndigits)``.
+   the decimal point.  If *ndigits* is omitted or is ``None``, it returns the
+   nearest integer to its input.  Delegates to ``number.__round__(ndigits)``.
 
    For the built-in types supporting :func:`round`, values are rounded to the
    closest multiple of 10 to the power minus *ndigits*; if two multiples are
@@ -1306,8 +1333,7 @@ are always available.  They are listed here in alphabetical order.
    compare equal --- this is helpful for sorting in multiple passes (for
    example, sort by department, then by salary grade).
 
-   For sorting examples and a brief sorting tutorial, see `Sorting HowTo
-   <https://wiki.python.org/moin/HowTo/Sorting/>`_\.
+   For sorting examples and a brief sorting tutorial, see :ref:`sortinghowto`.
 
 .. function:: staticmethod(function)
 
@@ -1415,7 +1441,7 @@ are always available.  They are listed here in alphabetical order.
 
    For practical suggestions on how to design cooperative classes using
    :func:`super`, see `guide to using super()
-   <http://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
+   <https://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
 
 
 .. _func-tuple:
@@ -1441,11 +1467,12 @@ are always available.  They are listed here in alphabetical order.
 
    With three arguments, return a new type object.  This is essentially a
    dynamic form of the :keyword:`class` statement. The *name* string is the
-   class name and becomes the :attr:`~class.__name__` attribute; the *bases*
+   class name and becomes the :attr:`~definition.__name__` attribute; the *bases*
    tuple itemizes the base classes and becomes the :attr:`~class.__bases__`
    attribute; and the *dict* dictionary is the namespace containing definitions
-   for class body and becomes the :attr:`~object.__dict__` attribute.  For
-   example, the following two statements create identical :class:`type` objects:
+   for class body and is copied to a standard dictionary to become the
+   :attr:`~object.__dict__` attribute.  For example, the following two
+   statements create identical :class:`type` objects:
 
       >>> class X:
       ...     a = 1
@@ -1454,16 +1481,19 @@ are always available.  They are listed here in alphabetical order.
 
    See also :ref:`bltin-type-objects`.
 
+   .. versionchanged:: 3.6
+      Subclasses of :class:`type` which don't override ``type.__new__`` may no
+      longer use the one-argument form to get the type of an object.
 
 .. function:: vars([object])
 
    Return the :attr:`~object.__dict__` attribute for a module, class, instance,
-   or any other object with a :attr:`__dict__` attribute.
+   or any other object with a :attr:`~object.__dict__` attribute.
 
-   Objects such as modules and instances have an updateable :attr:`__dict__`
+   Objects such as modules and instances have an updateable :attr:`~object.__dict__`
    attribute; however, other objects may have write restrictions on their
-   :attr:`__dict__` attributes (for example, classes use a
-   dictproxy to prevent direct dictionary updates).
+   :attr:`~object.__dict__` attributes (for example, classes use a
+   :class:`types.MappingProxyType` to prevent direct dictionary updates).
 
    Without an argument, :func:`vars` acts like :func:`locals`.  Note, the
    locals dictionary is only useful for reads since updates to the locals

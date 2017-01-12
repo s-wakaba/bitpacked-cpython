@@ -108,7 +108,7 @@ packages.  Their concept and implementation are inspired by the popular
 with the interpreter core.
 
 This PEP adds the :mod:`venv` module for programmatic access, and the
-:ref:`pyvenv <scripts-pyvenv>` script for command-line access and
+``pyvenv`` script for command-line access and
 administration.  The Python interpreter checks for a ``pyvenv.cfg``,
 file whose existence signals the base of a virtual environment's directory
 tree.
@@ -182,7 +182,7 @@ API changes
 * The maximum number of dimensions is officially limited to 64.
 
 * The representation of empty shape, strides and suboffsets is now
-  an empty tuple instead of None.
+  an empty tuple instead of ``None``.
 
 * Accessing a memoryview element with format 'B' (unsigned bytes)
   now returns an integer (in accordance with the struct module syntax).
@@ -440,15 +440,15 @@ return a final value to the outer generator::
     ...
     >>> tallies = []
     >>> acc = gather_tallies(tallies)
-    >>> next(acc) # Ensure the accumulator is ready to accept values
+    >>> next(acc)  # Ensure the accumulator is ready to accept values
     >>> for i in range(4):
     ...     acc.send(i)
     ...
-    >>> acc.send(None) # Finish the first tally
+    >>> acc.send(None)  # Finish the first tally
     >>> for i in range(5):
     ...     acc.send(i)
     ...
-    >>> acc.send(None) # Finish the second tally
+    >>> acc.send(None)  # Finish the second tally
     >>> tallies
     [6, 10]
 
@@ -871,7 +871,9 @@ signal. Call :func:`faulthandler.enable` to install fault handlers for the
 :envvar:`PYTHONFAULTHANDLER` environment variable or by using :option:`-X`
 ``faulthandler`` command line option.
 
-Example of a segmentation fault on Linux: ::
+Example of a segmentation fault on Linux:
+
+.. code-block:: shell-session
 
     $ python -q -X faulthandler
     >>> import ctypes
@@ -999,7 +1001,6 @@ byte of an invalid byte sequence. For example, ``b'\xff\n'.decode('gb2312',
 Incremental CJK codec encoders are no longer reset at each call to their
 encode() methods. For example::
 
-    $ ./python -q
     >>> import codecs
     >>> encoder = codecs.getincrementalencoder('hz')('strict')
     >>> b''.join(encoder.encode(x) for x in '\u52ff\u65bd\u65bc\u4eba\u3002 Bye.')
@@ -1528,7 +1529,7 @@ by Petri Lehtinen in :issue:`12021`.)
 multiprocessing
 ---------------
 
-The new :func:`multiprocessing.connection.wait` function allows to poll
+The new :func:`multiprocessing.connection.wait` function allows polling
 multiple objects (such as connections, sockets and pipes) with a timeout.
 (Contributed by Richard Oudkerk in :issue:`12328`.)
 
@@ -1715,8 +1716,8 @@ pickle
 ------
 
 :class:`pickle.Pickler` objects now have an optional
-:attr:`~pickle.Pickler.dispatch_table` attribute allowing to set per-pickler
-reduction functions.
+:attr:`~pickle.Pickler.dispatch_table` attribute allowing per-pickler
+reduction functions to be set.
 
 (Contributed by Richard Oudkerk in :issue:`14166`.)
 
@@ -1741,7 +1742,7 @@ sched
 -----
 
 * :meth:`~sched.scheduler.run` now accepts a *blocking* parameter which when
-  set to False makes the method execute the scheduled events due to expire
+  set to false makes the method execute the scheduled events due to expire
   soonest (if any) and then return immediately.
   This is useful in case you want to use the :class:`~sched.scheduler` in
   non-blocking applications.  (Contributed by Giampaolo Rodolà in :issue:`13449`.)
@@ -1884,13 +1885,13 @@ socket
   Heiko Wundram)
 
 * The :class:`~socket.socket` class now supports the PF_CAN protocol family
-  (http://en.wikipedia.org/wiki/Socketcan), on Linux
-  (http://lwn.net/Articles/253425).
+  (https://en.wikipedia.org/wiki/Socketcan), on Linux
+  (https://lwn.net/Articles/253425).
 
   (Contributed by Matthias Fuchs, updated by Tiago Gonçalves in :issue:`10141`.)
 
 * The :class:`~socket.socket` class now supports the PF_RDS protocol family
-  (http://en.wikipedia.org/wiki/Reliable_Datagram_Sockets and
+  (https://en.wikipedia.org/wiki/Reliable_Datagram_Sockets and
   https://oss.oracle.com/projects/rds/).
 
 * The :class:`~socket.socket` class now supports the ``PF_SYSTEM`` protocol
@@ -1953,7 +1954,7 @@ ssl
   :attr:`~ssl.OP_NO_COMPRESSION` can be used to disable compression.
   (Contributed by Antoine Pitrou in :issue:`13634`.)
 
-* Support has been added for the Next Procotol Negotiation extension using
+* Support has been added for the Next Protocol Negotiation extension using
   the :meth:`ssl.SSLContext.set_npn_protocols` method.
   (Contributed by Colin Marc in :issue:`14204`.)
 

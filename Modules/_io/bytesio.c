@@ -87,7 +87,7 @@ scan_eol(bytesio *self, Py_ssize_t len)
 static int
 unshare_buffer(bytesio *self, size_t size)
 {
-    PyObject *new_buf, *old_buf;
+    PyObject *new_buf;
     assert(SHARED_BUF(self));
     assert(self->exports == 0);
     assert(size >= (size_t)self->string_size);
@@ -96,9 +96,7 @@ unshare_buffer(bytesio *self, size_t size)
         return -1;
     memcpy(PyBytes_AS_STRING(new_buf), PyBytes_AS_STRING(self->buf),
            self->string_size);
-    old_buf = self->buf;
-    self->buf = new_buf;
-    Py_DECREF(old_buf);
+    Py_SETREF(self->buf, new_buf);
     return 0;
 }
 
@@ -548,15 +546,15 @@ _io.BytesIO.readinto
     buffer: Py_buffer(accept={rwbuffer})
     /
 
-Read up to len(buffer) bytes into buffer.
+Read bytes into buffer.
 
 Returns number of bytes read (0 for EOF), or None if the object
-is set not to block as has no data to read.
+is set not to block and has no data to read.
 [clinic start generated code]*/
 
 static PyObject *
 _io_BytesIO_readinto_impl(bytesio *self, Py_buffer *buffer)
-/*[clinic end generated code: output=a5d407217dcf0639 input=71581f32635c3a31]*/
+/*[clinic end generated code: output=a5d407217dcf0639 input=1424d0fdce857919]*/
 {
     Py_ssize_t len, n;
 
@@ -969,8 +967,7 @@ _io_BytesIO___init___impl(bytesio *self, PyObject *initvalue)
     if (initvalue && initvalue != Py_None) {
         if (PyBytes_CheckExact(initvalue)) {
             Py_INCREF(initvalue);
-            Py_XDECREF(self->buf);
-            self->buf = initvalue;
+            Py_XSETREF(self->buf, initvalue);
             self->string_size = PyBytes_GET_SIZE(initvalue);
         }
         else {
@@ -991,7 +988,7 @@ bytesio_sizeof(bytesio *self, void *unused)
 {
     Py_ssize_t res;
 
-    res = sizeof(bytesio);
+    res = _PyObject_SIZE(Py_TYPE(self));
     if (self->buf && !SHARED_BUF(self))
         res += _PySys_GetSizeOf(self->buf);
     return PyLong_FromSsize_t(res);

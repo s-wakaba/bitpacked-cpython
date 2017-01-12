@@ -3,6 +3,7 @@
 
 .. module:: linecache
    :synopsis: This module provides random access to individual lines from text files.
+
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 
 **Source code:** :source:`Lib/linecache.py`
@@ -50,7 +51,7 @@ The :mod:`linecache` module defines the following functions:
 .. function:: lazycache(filename, module_globals)
 
    Capture enough detail about a non-file-based module to permit getting its
-   lines later via :func:`getline` even if *module_globals* is None in the later
+   lines later via :func:`getline` even if *module_globals* is ``None`` in the later
    call. This avoids doing I/O until a line is actually needed, without having
    to carry the module globals around indefinitely.
 

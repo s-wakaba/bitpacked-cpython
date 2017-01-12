@@ -10,6 +10,7 @@ import codecs
 import gc
 import sysconfig
 import platform
+import locale
 
 # count the number of test runs, used to create unique
 # strings to intern in test_intern()
@@ -636,6 +637,8 @@ class SysModuleTest(unittest.TestCase):
 
     @unittest.skipUnless(test.support.FS_NONASCII,
                          'requires OS support of non-ASCII encodings')
+    @unittest.skipUnless(sys.getfilesystemencoding() == locale.getpreferredencoding(False),
+                         'requires FS encoding to match locale')
     def test_ioencoding_nonascii(self):
         env = dict(os.environ)
 
@@ -653,7 +656,7 @@ class SysModuleTest(unittest.TestCase):
         self.assertEqual(os.path.abspath(sys.executable), sys.executable)
 
         # Issue #7774: Ensure that sys.executable is an empty string if argv[0]
-        # has been set to an non existent program name and Python is unable to
+        # has been set to a non existent program name and Python is unable to
         # retrieve the real program name
 
         # For a normal installation, it should work without 'cwd'
@@ -678,8 +681,6 @@ class SysModuleTest(unittest.TestCase):
         fs_encoding = sys.getfilesystemencoding()
         if sys.platform == 'darwin':
             expected = 'utf-8'
-        elif sys.platform == 'win32':
-            expected = 'mbcs'
         else:
             expected = None
         self.check_fsencoding(fs_encoding, expected)
@@ -700,8 +701,10 @@ class SysModuleTest(unittest.TestCase):
         args = [sys.executable, "-c", code]
         if isolated:
             args.append("-I")
-        elif encoding:
+        if encoding is not None:
             env['PYTHONIOENCODING'] = encoding
+        else:
+            env.pop('PYTHONIOENCODING', None)
         p = subprocess.Popen(args,
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
@@ -718,14 +721,31 @@ class SysModuleTest(unittest.TestCase):
                          'stderr: backslashreplace\n')
 
         # replace the default error handler
-        out = self.c_locale_get_error_handler(encoding=':strict')
+        out = self.c_locale_get_error_handler(encoding=':ignore')
+        self.assertEqual(out,
+                         'stdin: ignore\n'
+                         'stdout: ignore\n'
+                         'stderr: backslashreplace\n')
+
+        # force the encoding
+        out = self.c_locale_get_error_handler(encoding='iso8859-1')
+        self.assertEqual(out,
+                         'stdin: strict\n'
+                         'stdout: strict\n'
+                         'stderr: backslashreplace\n')
+        out = self.c_locale_get_error_handler(encoding='iso8859-1:')
         self.assertEqual(out,
                          'stdin: strict\n'
                          'stdout: strict\n'
                          'stderr: backslashreplace\n')
 
-        # force the encoding
-        out = self.c_locale_get_error_handler(encoding='iso8859-1')
+        # have no any effect
+        out = self.c_locale_get_error_handler(encoding=':')
+        self.assertEqual(out,
+                         'stdin: surrogateescape\n'
+                         'stdout: surrogateescape\n'
+                         'stderr: backslashreplace\n')
+        out = self.c_locale_get_error_handler(encoding='')
         self.assertEqual(out,
                          'stdin: surrogateescape\n'
                          'stdout: surrogateescape\n'
@@ -793,6 +813,7 @@ class SysModuleTest(unittest.TestCase):
         c = sys.getallocatedblocks()
         self.assertIn(c, range(b - 50, b + 50))
 
+    @test.support.requires_type_collecting
     def test_is_finalizing(self):
         self.assertIs(sys.is_finalizing(), False)
         # Don't use the atexit module because _Py_Finalizing is only set
@@ -823,11 +844,6 @@ class SizeofTest(unittest.TestCase):
         self.longdigit = sys.int_info.sizeof_digit
         import _testcapi
         self.gc_headsize = _testcapi.SIZEOF_PYGC_HEAD
-        self.file = open(test.support.TESTFN, 'wb')
-
-    def tearDown(self):
-        self.file.close()
-        test.support.unlink(test.support.TESTFN)
 
     check_sizeof = test.support.check_sizeof
 
@@ -878,6 +894,7 @@ class SizeofTest(unittest.TestCase):
 
     def test_objecttypes(self):
         # check all types defined in Objects/
+        calcsize = struct.calcsize
         size = test.support.calcobjsize
         vsize = test.support.calcvobjsize
         check = self.check_sizeof
@@ -905,13 +922,13 @@ class SizeofTest(unittest.TestCase):
             return inner
         check(get_cell().__closure__[0], size('P'))
         # code
-        check(get_cell().__code__, size('5i9Pi3P'))
-        check(get_cell.__code__, size('5i9Pi3P'))
+        check(get_cell().__code__, size('6i13P'))
+        check(get_cell.__code__, size('6i13P'))
         def get_cell2(x):
             def inner():
                 return x
             return inner
-        check(get_cell2.__code__, size('5i9Pi3P') + 1)
+        check(get_cell2.__code__, size('6i13P') + 1)
         # complex
         check(complex(0,1), size('2d'))
         # method_descriptor (descriptor object)
@@ -929,17 +946,23 @@ class SizeofTest(unittest.TestCase):
         # method-wrapper (descriptor object)
         check({}.__iter__, size('2P'))
         # dict
-        check({}, size('n2P' + '2nPn' + 8*'n2P'))
+        check({}, size('nQ2P') + calcsize('2nP2n') + 8 + (8*2//3)*calcsize('n2P'))
         longdict = {1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8}
-        check(longdict, size('n2P' + '2nPn') + 16*struct.calcsize('n2P'))
-        # dictionary-keyiterator
+        check(longdict, size('nQ2P') + calcsize('2nP2n') + 16 + (16*2//3)*calcsize('n2P'))
+        # dictionary-keyview
         check({}.keys(), size('P'))
-        # dictionary-valueiterator
+        # dictionary-valueview
         check({}.values(), size('P'))
-        # dictionary-itemiterator
+        # dictionary-itemview
         check({}.items(), size('P'))
         # dictionary iterator
         check(iter({}), size('P2nPn'))
+        # dictionary-keyiterator
+        check(iter({}.keys()), size('P2nPn'))
+        # dictionary-valueiterator
+        check(iter({}.values()), size('P2nPn'))
+        # dictionary-itemiterator
+        check(iter({}.items()), size('P2nPn'))
         # dictproxy
         class C(object): pass
         check(C.__dict__, size('P'))
@@ -1058,8 +1081,8 @@ class SizeofTest(unittest.TestCase):
                 check(set(sample), s)
                 check(frozenset(sample), s)
             else:
-                check(set(sample), s + newsize*struct.calcsize('nP'))
-                check(frozenset(sample), s + newsize*struct.calcsize('nP'))
+                check(set(sample), s + newsize*calcsize('nP'))
+                check(frozenset(sample), s + newsize*calcsize('nP'))
         # setiterator
         check(iter(set()), size('P3n'))
         # slice
@@ -1071,18 +1094,25 @@ class SizeofTest(unittest.TestCase):
         check((1,2,3), vsize('') + 3*self.P)
         # type
         # static type: PyTypeObject
-        s = vsize('P2n15Pl4Pn9Pn11PIP')
+        fmt = 'P2n15Pl4Pn9Pn11PIP'
+        if hasattr(sys, 'getcounts'):
+            fmt += '3n2P'
+        s = vsize(fmt)
         check(int, s)
-        # (PyTypeObject + PyAsyncMethods + PyNumberMethods + PyMappingMethods +
-        #  PySequenceMethods + PyBufferProcs + 4P)
-        s = vsize('P2n17Pl4Pn9Pn11PIP') + struct.calcsize('34P 3P 3P 10P 2P 4P')
-        # Separate block for PyDictKeysObject with 4 entries
-        s += struct.calcsize("2nPn") + 4*struct.calcsize("n2P")
+        s = vsize(fmt +                 # PyTypeObject
+                  '3P'                  # PyAsyncMethods
+                  '36P'                 # PyNumberMethods
+                  '3P'                  # PyMappingMethods
+                  '10P'                 # PySequenceMethods
+                  '2P'                  # PyBufferProcs
+                  '4P')
+        # Separate block for PyDictKeysObject with 8 keys and 5 entries
+        s += calcsize("2nP2n") + 8 + 5*calcsize("n2P")
         # class
         class newstyleclass(object): pass
         check(newstyleclass, s)
         # dict with shared keys
-        check(newstyleclass().__dict__, size('n2P' + '2nPn'))
+        check(newstyleclass().__dict__, size('nQ2P' + '2nP2n'))
         # unicode
         # each tuple contains a string and its expected character size
         # don't put any static strings here, as they may contain
@@ -1121,6 +1151,36 @@ class SizeofTest(unittest.TestCase):
         # weakcallableproxy
         check(weakref.proxy(int), size('2Pn2P'))
 
+    def check_slots(self, obj, base, extra):
+        expected = sys.getsizeof(base) + struct.calcsize(extra)
+        if gc.is_tracked(obj) and not gc.is_tracked(base):
+            expected += self.gc_headsize
+        self.assertEqual(sys.getsizeof(obj), expected)
+
+    def test_slots(self):
+        # check all subclassable types defined in Objects/ that allow
+        # non-empty __slots__
+        check = self.check_slots
+        class BA(bytearray):
+            __slots__ = 'a', 'b', 'c'
+        check(BA(), bytearray(), '3P')
+        class D(dict):
+            __slots__ = 'a', 'b', 'c'
+        check(D(x=[]), {'x': []}, '3P')
+        class L(list):
+            __slots__ = 'a', 'b', 'c'
+        check(L(), [], '3P')
+        class S(set):
+            __slots__ = 'a', 'b', 'c'
+        check(S(), set(), '3P')
+        class FS(frozenset):
+            __slots__ = 'a', 'b', 'c'
+        check(FS(), frozenset(), '3P')
+        from collections import OrderedDict
+        class OD(OrderedDict):
+            __slots__ = 'a', 'b', 'c'
+        check(OD(x=[]), OrderedDict(x=[]), '3P')
+
     def test_pythontypes(self):
         # check all types defined in Python/
         size = test.support.calcobjsize
@@ -1140,6 +1200,32 @@ class SizeofTest(unittest.TestCase):
         # XXX
         # sys.flags
         check(sys.flags, vsize('') + self.P * len(sys.flags))
+
+    def test_asyncgen_hooks(self):
+        old = sys.get_asyncgen_hooks()
+        self.assertIsNone(old.firstiter)
+        self.assertIsNone(old.finalizer)
+
+        firstiter = lambda *a: None
+        sys.set_asyncgen_hooks(firstiter=firstiter)
+        hooks = sys.get_asyncgen_hooks()
+        self.assertIs(hooks.firstiter, firstiter)
+        self.assertIs(hooks[0], firstiter)
+        self.assertIs(hooks.finalizer, None)
+        self.assertIs(hooks[1], None)
+
+        finalizer = lambda *a: None
+        sys.set_asyncgen_hooks(finalizer=finalizer)
+        hooks = sys.get_asyncgen_hooks()
+        self.assertIs(hooks.firstiter, firstiter)
+        self.assertIs(hooks[0], firstiter)
+        self.assertIs(hooks.finalizer, finalizer)
+        self.assertIs(hooks[1], finalizer)
+
+        sys.set_asyncgen_hooks(*old)
+        cur = sys.get_asyncgen_hooks()
+        self.assertIsNone(cur.firstiter)
+        self.assertIsNone(cur.finalizer)
 
 
 def test_main():

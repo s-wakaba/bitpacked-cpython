@@ -84,6 +84,11 @@ Local naming conventions:
 */
 
 #ifdef __APPLE__
+#include <AvailabilityMacros.h>
+/* for getaddrinfo thread safety test on old versions of OS X */
+#ifndef MAC_OS_X_VERSION_10_5
+#define MAC_OS_X_VERSION_10_5 1050
+#endif
   /*
    * inet_aton is not available on OSX 10.3, yet we want to use a binary
    * that was build on 10.4 or later to work on that release, weak linking
@@ -131,7 +136,7 @@ sendall(data[, flags]) -- send all data\n\
 send(data[, flags]) -- send data, may not send all of it\n\
 sendto(data[, flags], addr) -- send data to a given address\n\
 setblocking(0 | 1) -- set or clear the blocking I/O flag\n\
-setsockopt(level, optname, value) -- set socket options\n\
+setsockopt(level, optname, value[, optlen]) -- set socket options\n\
 settimeout(None | float) -- set or clear the timeout\n\
 shutdown(how) -- shut down traffic in one or both directions\n\
 if_nameindex() -- return all network interface indices and names\n\
@@ -148,7 +153,7 @@ if_indextoname(index) -- return the corresponding interface name\n\
    On the other hand, not all Linux versions agree, so there the settings
    computed by the configure script are needed! */
 
-#ifndef linux
+#ifndef __linux__
 # undef HAVE_GETHOSTBYNAME_R_3_ARG
 # undef HAVE_GETHOSTBYNAME_R_5_ARG
 # undef HAVE_GETHOSTBYNAME_R_6_ARG
@@ -158,17 +163,23 @@ if_indextoname(index) -- return the corresponding interface name\n\
 # include <sys/uio.h>
 #endif
 
-#ifndef WITH_THREAD
+#if !defined(WITH_THREAD)
+# undef HAVE_GETHOSTBYNAME_R
+#endif
+
+#if defined(__ANDROID__) && __ANDROID_API__ < 23
 # undef HAVE_GETHOSTBYNAME_R
 #endif
 
 #ifdef HAVE_GETHOSTBYNAME_R
-# if defined(_AIX)
+# if defined(_AIX) && !defined(_LINUX_SOURCE_COMPAT)
 #  define HAVE_GETHOSTBYNAME_R_3_ARG
 # elif defined(__sun) || defined(__sgi)
 #  define HAVE_GETHOSTBYNAME_R_5_ARG
-# elif defined(linux)
+# elif defined(__linux__)
 /* Rely on the configure script */
+# elif defined(_LINUX_SOURCE_COMPAT) /* Linux compatibility on AIX */
+#  define HAVE_GETHOSTBYNAME_R_6_ARG
 # else
 #  undef HAVE_GETHOSTBYNAME_R
 # endif
@@ -179,15 +190,32 @@ if_indextoname(index) -- return the corresponding interface name\n\
 # define USE_GETHOSTBYNAME_LOCK
 #endif
 
-/* To use __FreeBSD_version */
+/* To use __FreeBSD_version, __OpenBSD__, and __NetBSD_Version__ */
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
 #endif
 /* On systems on which getaddrinfo() is believed to not be thread-safe,
-   (this includes the getaddrinfo emulation) protect access with a lock. */
-#if defined(WITH_THREAD) && (defined(__APPLE__) || \
+   (this includes the getaddrinfo emulation) protect access with a lock.
+
+   getaddrinfo is thread-safe on Mac OS X 10.5 and later. Originally it was
+   a mix of code including an unsafe implementation from an old BSD's
+   libresolv. In 10.5 Apple reimplemented it as a safe IPC call to the
+   mDNSResponder process. 10.5 is the first be UNIX '03 certified, which
+   includes the requirement that getaddrinfo be thread-safe. See issue #25924.
+
+   It's thread-safe in OpenBSD starting with 5.4, released Nov 2013:
+   http://www.openbsd.org/plus54.html
+
+   It's thread-safe in NetBSD starting with 4.0, released Dec 2007:
+
+http://cvsweb.netbsd.org/bsdweb.cgi/src/lib/libc/net/getaddrinfo.c.diff?r1=1.82&r2=1.83
+ */
+#if defined(WITH_THREAD) && ( \
+    (defined(__APPLE__) && \
+        MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_5) || \
     (defined(__FreeBSD__) && __FreeBSD_version+0 < 503000) || \
-    defined(__OpenBSD__) || defined(__NetBSD__) || \
+    (defined(__OpenBSD__) && OpenBSD+0 < 201311) || \
+    (defined(__NetBSD__) && __NetBSD_Version__+0 < 400000000) || \
     !defined(HAVE_GETADDRINFO))
 #define USE_GETADDRINFO_LOCK
 #endif
@@ -259,6 +287,36 @@ if_indextoname(index) -- return the corresponding interface name\n\
 #ifdef HAVE_NET_IF_H
 #include <net/if.h>
 #endif
+
+#ifdef HAVE_SOCKADDR_ALG
+#include <linux/if_alg.h>
+#ifndef AF_ALG
+#define AF_ALG 38
+#endif
+#ifndef SOL_ALG
+#define SOL_ALG 279
+#endif
+
+/* Linux 3.19 */
+#ifndef ALG_SET_AEAD_ASSOCLEN
+#define ALG_SET_AEAD_ASSOCLEN           4
+#endif
+#ifndef ALG_SET_AEAD_AUTHSIZE
+#define ALG_SET_AEAD_AUTHSIZE           5
+#endif
+/* Linux 4.8 */
+#ifndef ALG_SET_PUBKEY
+#define ALG_SET_PUBKEY                  6
+#endif
+
+#ifndef ALG_OP_SIGN
+#define ALG_OP_SIGN                     2
+#endif
+#ifndef ALG_OP_VERIFY
+#define ALG_OP_VERIFY                   3
+#endif
+
+#endif /* HAVE_SOCKADDR_ALG */
 
 /* Generic socket object definitions and includes */
 #define PySocket_BUILDING_SOCKET
@@ -566,6 +624,7 @@ set_gaierror(int error)
 static int
 internal_setblocking(PySocketSockObject *s, int block)
 {
+    int result = -1;
 #ifdef MS_WINDOWS
     u_long arg;
 #endif
@@ -584,24 +643,41 @@ internal_setblocking(PySocketSockObject *s, int block)
 #ifndef MS_WINDOWS
 #if (defined(HAVE_SYS_IOCTL_H) && defined(FIONBIO))
     block = !block;
-    ioctl(s->sock_fd, FIONBIO, (unsigned int *)&block);
+    if (ioctl(s->sock_fd, FIONBIO, (unsigned int *)&block) == -1)
+        goto done;
 #else
     delay_flag = fcntl(s->sock_fd, F_GETFL, 0);
+    if (delay_flag == -1)
+        goto done;
     if (block)
         new_delay_flag = delay_flag & (~O_NONBLOCK);
     else
         new_delay_flag = delay_flag | O_NONBLOCK;
     if (new_delay_flag != delay_flag)
-        fcntl(s->sock_fd, F_SETFL, new_delay_flag);
+        if (fcntl(s->sock_fd, F_SETFL, new_delay_flag) == -1)
+            goto done;
 #endif
 #else /* MS_WINDOWS */
     arg = !block;
-    ioctlsocket(s->sock_fd, FIONBIO, &arg);
+    if (ioctlsocket(s->sock_fd, FIONBIO, &arg) != 0)
+        goto done;
 #endif /* MS_WINDOWS */
+
+    result = 0;
+
+  done:
+    ;  /* necessary for --without-threads flag */
     Py_END_ALLOW_THREADS
 
-    /* Since these don't return anything */
-    return 1;
+    if (result) {
+#ifndef MS_WINDOWS
+        PyErr_SetFromErrno(PyExc_OSError);
+#else
+        PyErr_SetExcFromWindowsErr(PyExc_OSError, WSAGetLastError());
+#endif
+    }
+
+    return result;
 }
 
 static int
@@ -626,7 +702,7 @@ internal_select(PySocketSockObject *s, int writing, _PyTime_t interval,
     assert(!(connect && !writing));
 
     /* Guard against closed socket */
-    if (s->sock_fd < 0)
+    if (s->sock_fd == INVALID_SOCKET)
         return 0;
 
     /* Prefer poll, if available, since you can poll() any fd
@@ -849,7 +925,7 @@ sock_call(PySocketSockObject *s,
 /* Default timeout for new sockets */
 static _PyTime_t defaulttimeout = _PYTIME_FROMSECONDS(-1);
 
-static void
+static int
 init_sockobject(PySocketSockObject *s,
                 SOCKET_T fd, int family, int type, int proto)
 {
@@ -866,10 +942,13 @@ init_sockobject(PySocketSockObject *s,
 #endif
     {
         s->sock_timeout = defaulttimeout;
-        if (defaulttimeout >= 0)
-            internal_setblocking(s, 0);
+        if (defaulttimeout >= 0) {
+            if (internal_setblocking(s, 0) == -1) {
+                return -1;
+            }
+        }
     }
-
+    return 0;
 }
 
 
@@ -884,8 +963,12 @@ new_sockobject(SOCKET_T fd, int family, int type, int proto)
     PySocketSockObject *s;
     s = (PySocketSockObject *)
         PyType_GenericNew(&sock_type, NULL, NULL);
-    if (s != NULL)
-        init_sockobject(s, fd, family, type, proto);
+    if (s == NULL)
+        return NULL;
+    if (init_sockobject(s, fd, family, type, proto) == -1) {
+        Py_DECREF(s);
+        return NULL;
+    }
     return s;
 }
 
@@ -904,7 +987,7 @@ static PyThread_type_lock netdb_lock;
    an error occurred; then an exception is raised. */
 
 static int
-setipaddr(char *name, struct sockaddr *addr_ret, size_t addr_ret_size, int af)
+setipaddr(const char *name, struct sockaddr *addr_ret, size_t addr_ret_size, int af)
 {
     struct addrinfo hints, *res;
     int error;
@@ -1085,7 +1168,7 @@ makeipaddr(struct sockaddr *addr, int addrlen)
    an error occurred. */
 
 static int
-setbdaddr(char *name, bdaddr_t *bdaddr)
+setbdaddr(const char *name, bdaddr_t *bdaddr)
 {
     unsigned int b0, b1, b2, b3, b4, b5;
     char ch;
@@ -1158,7 +1241,7 @@ makesockaddr(SOCKET_T sockfd, struct sockaddr *addr, size_t addrlen, int proto)
     case AF_UNIX:
     {
         struct sockaddr_un *a = (struct sockaddr_un *) addr;
-#ifdef linux
+#ifdef __linux__
         if (a->sun_path[0] == 0) {  /* Linux abstract namespace */
             addrlen -= offsetof(struct sockaddr_un, sun_path);
             return PyBytes_FromStringAndSize(a->sun_path, addrlen);
@@ -1349,6 +1432,22 @@ makesockaddr(SOCKET_T sockfd, struct sockaddr *addr, size_t addrlen, int proto)
         }
 #endif
 
+#ifdef HAVE_SOCKADDR_ALG
+    case AF_ALG:
+    {
+        struct sockaddr_alg *a = (struct sockaddr_alg *)addr;
+        return Py_BuildValue("s#s#HH",
+            a->salg_type,
+            strnlen((const char*)a->salg_type,
+                    sizeof(a->salg_type)),
+            a->salg_name,
+            strnlen((const char*)a->salg_name,
+                    sizeof(a->salg_name)),
+            a->salg_feat,
+            a->salg_mask);
+    }
+#endif
+
     /* More cases here... */
 
     default:
@@ -1379,7 +1478,7 @@ static int
 idna_converter(PyObject *obj, struct maybe_idna *data)
 {
     size_t len;
-    PyObject *obj2, *obj3;
+    PyObject *obj2;
     if (obj == NULL) {
         idna_cleanup(data);
         return 1;
@@ -1394,31 +1493,27 @@ idna_converter(PyObject *obj, struct maybe_idna *data)
         data->buf = PyByteArray_AsString(obj);
         len = PyByteArray_Size(obj);
     }
-    else if (PyUnicode_Check(obj) && PyUnicode_READY(obj) == 0 && PyUnicode_IS_COMPACT_ASCII(obj)) {
-        data->buf = PyUnicode_DATA(obj);
-        len = PyUnicode_GET_LENGTH(obj);
+    else if (PyUnicode_Check(obj)) {
+        if (PyUnicode_READY(obj) == 0 && PyUnicode_IS_COMPACT_ASCII(obj)) {
+            data->buf = PyUnicode_DATA(obj);
+            len = PyUnicode_GET_LENGTH(obj);
+        }
+        else {
+            obj2 = PyUnicode_AsEncodedString(obj, "idna", NULL);
+            if (!obj2) {
+                PyErr_SetString(PyExc_TypeError, "encoding of hostname failed");
+                return 0;
+            }
+            assert(PyBytes_Check(obj2));
+            data->obj = obj2;
+            data->buf = PyBytes_AS_STRING(obj2);
+            len = PyBytes_GET_SIZE(obj2);
+        }
     }
     else {
-        obj2 = PyUnicode_FromObject(obj);
-        if (!obj2) {
-            PyErr_Format(PyExc_TypeError, "string or unicode text buffer expected, not %s",
-                         obj->ob_type->tp_name);
-            return 0;
-        }
-        obj3 = PyUnicode_AsEncodedString(obj2, "idna", NULL);
-        Py_DECREF(obj2);
-        if (!obj3) {
-            PyErr_SetString(PyExc_TypeError, "encoding of hostname failed");
-            return 0;
-        }
-        if (!PyBytes_Check(obj3)) {
-            Py_DECREF(obj3);
-            PyErr_SetString(PyExc_TypeError, "encoding of hostname failed to return bytes");
-            return 0;
-        }
-        data->obj = obj3;
-        data->buf = PyBytes_AS_STRING(obj3);
-        len = PyBytes_GET_SIZE(obj3);
+        PyErr_Format(PyExc_TypeError, "str, bytes or bytearray expected, not %s",
+                     obj->ob_type->tp_name);
+        return 0;
     }
     if (strlen(data->buf) != len) {
         Py_CLEAR(data->obj);
@@ -1461,7 +1556,7 @@ getsockaddrarg(PySocketSockObject *s, PyObject *args,
         assert(path.len >= 0);
 
         addr = (struct sockaddr_un*)addr_ret;
-#ifdef linux
+#ifdef __linux__
         if (path.len > 0 && *(const char *)path.buf == 0) {
             /* Linux abstract namespace extension */
             if ((size_t)path.len > sizeof addr->sun_path) {
@@ -1918,6 +2013,36 @@ getsockaddrarg(PySocketSockObject *s, PyObject *args,
             return 0;
         }
 #endif
+#ifdef HAVE_SOCKADDR_ALG
+    case AF_ALG:
+    {
+        struct sockaddr_alg *sa;
+        char *type;
+        char *name;
+        sa = (struct sockaddr_alg *)addr_ret;
+
+        memset(sa, 0, sizeof(*sa));
+        sa->salg_family = AF_ALG;
+
+        if (!PyArg_ParseTuple(args, "ss|HH:getsockaddrarg",
+                                &type, &name, &sa->salg_feat, &sa->salg_mask))
+            return 0;
+        /* sockaddr_alg has fixed-sized char arrays for type and name */
+        if (strlen(type) > sizeof(sa->salg_type)) {
+            PyErr_SetString(PyExc_ValueError, "AF_ALG type too long.");
+            return 0;
+        }
+        strncpy((char *)sa->salg_type, type, sizeof(sa->salg_type));
+        if (strlen(name) > sizeof(sa->salg_name)) {
+            PyErr_SetString(PyExc_ValueError, "AF_ALG name too long.");
+            return 0;
+        }
+        strncpy((char *)sa->salg_name, name, sizeof(sa->salg_name));
+
+        *len_ret = sizeof(*sa);
+        return 1;
+    }
+#endif
 
     /* More cases here... */
 
@@ -1945,12 +2070,13 @@ getsockaddrlen(PySocketSockObject *s, socklen_t *len_ret)
         return 1;
     }
 #endif /* AF_UNIX */
+
 #if defined(AF_NETLINK)
-       case AF_NETLINK:
-       {
-           *len_ret = sizeof (struct sockaddr_nl);
-           return 1;
-       }
+    case AF_NETLINK:
+    {
+        *len_ret = sizeof (struct sockaddr_nl);
+        return 1;
+    }
 #endif
 
 #ifdef AF_RDS
@@ -2038,6 +2164,13 @@ getsockaddrlen(PySocketSockObject *s, socklen_t *len_ret)
                             "unknown PF_SYSTEM protocol");
             return 0;
         }
+#endif
+#ifdef HAVE_SOCKADDR_ALG
+    case AF_ALG:
+    {
+        *len_ret = sizeof (struct sockaddr_alg);
+        return 1;
+    }
 #endif
 
     /* More cases here... */
@@ -2198,10 +2331,21 @@ static int
 sock_accept_impl(PySocketSockObject *s, void *data)
 {
     struct sock_accept *ctx = data;
+    struct sockaddr *addr = SAS2SA(ctx->addrbuf);
+    socklen_t *paddrlen = ctx->addrlen;
+#ifdef HAVE_SOCKADDR_ALG
+    /* AF_ALG does not support accept() with addr and raises
+     * ECONNABORTED instead. */
+    if (s->sock_family == AF_ALG) {
+        addr = NULL;
+        paddrlen = NULL;
+        *ctx->addrlen = 0;
+    }
+#endif
 
 #if defined(HAVE_ACCEPT4) && defined(SOCK_CLOEXEC)
     if (accept4_works != 0) {
-        ctx->result = accept4(s->sock_fd, SAS2SA(ctx->addrbuf), ctx->addrlen,
+        ctx->result = accept4(s->sock_fd, addr, paddrlen,
                               SOCK_CLOEXEC);
         if (ctx->result == INVALID_SOCKET && accept4_works == -1) {
             /* On Linux older than 2.6.28, accept4() fails with ENOSYS */
@@ -2209,9 +2353,9 @@ sock_accept_impl(PySocketSockObject *s, void *data)
         }
     }
     if (accept4_works == 0)
-        ctx->result = accept(s->sock_fd, SAS2SA(ctx->addrbuf), ctx->addrlen);
+        ctx->result = accept(s->sock_fd, addr, paddrlen);
 #else
-    ctx->result = accept(s->sock_fd, SAS2SA(ctx->addrbuf), ctx->addrlen);
+    ctx->result = accept(s->sock_fd, addr, paddrlen);
 #endif
 
 #ifdef MS_WINDOWS
@@ -2307,10 +2451,10 @@ sock_setblocking(PySocketSockObject *s, PyObject *arg)
         return NULL;
 
     s->sock_timeout = _PyTime_FromSeconds(block ? -1 : 0);
-    internal_setblocking(s, block);
-
-    Py_INCREF(Py_None);
-    return Py_None;
+    if (internal_setblocking(s, block) == -1) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(setblocking_doc,
@@ -2376,10 +2520,10 @@ sock_settimeout(PySocketSockObject *s, PyObject *arg)
         return NULL;
 
     s->sock_timeout = timeout;
-    internal_setblocking(s, timeout < 0);
-
-    Py_INCREF(Py_None);
-    return Py_None;
+    if (internal_setblocking(s, timeout < 0) == -1) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(settimeout_doc,
@@ -2413,9 +2557,12 @@ operations. A timeout of None indicates that timeouts on socket \n\
 operations are disabled.");
 
 /* s.setsockopt() method.
-   With an integer third argument, sets an integer option.
+   With an integer third argument, sets an integer optval with optlen=4.
+   With None as third argument and an integer fourth argument, set
+   optval=NULL with unsigned int as optlen.
    With a string third argument, sets an option from a buffer;
-   use optional built-in module 'struct' to encode the string. */
+   use optional built-in module 'struct' to encode the string.
+*/
 
 static PyObject *
 sock_setsockopt(PySocketSockObject *s, PyObject *args)
@@ -2425,31 +2572,64 @@ sock_setsockopt(PySocketSockObject *s, PyObject *args)
     int res;
     Py_buffer optval;
     int flag;
+    unsigned int optlen;
+    PyObject *none;
 
+    /* setsockopt(level, opt, flag) */
     if (PyArg_ParseTuple(args, "iii:setsockopt",
                          &level, &optname, &flag)) {
         res = setsockopt(s->sock_fd, level, optname,
                          (char*)&flag, sizeof flag);
+        goto done;
     }
-    else {
-        PyErr_Clear();
-        if (!PyArg_ParseTuple(args, "iiy*:setsockopt",
-                              &level, &optname, &optval))
-            return NULL;
-        res = setsockopt(s->sock_fd, level, optname, optval.buf, optval.len);
+
+    PyErr_Clear();
+    /* setsockopt(level, opt, None, flag) */
+    if (PyArg_ParseTuple(args, "iiO!I:setsockopt",
+                         &level, &optname, Py_TYPE(Py_None), &none, &optlen)) {
+        assert(sizeof(socklen_t) >= sizeof(unsigned int));
+        res = setsockopt(s->sock_fd, level, optname,
+                         NULL, (socklen_t)optlen);
+        goto done;
+    }
+
+    PyErr_Clear();
+    /* setsockopt(level, opt, buffer) */
+    if (!PyArg_ParseTuple(args, "iiy*:setsockopt",
+                            &level, &optname, &optval))
+        return NULL;
+
+#ifdef MS_WINDOWS
+    if (optval.len > INT_MAX) {
         PyBuffer_Release(&optval);
+        PyErr_Format(PyExc_OverflowError,
+                        "socket option is larger than %i bytes",
+                        INT_MAX);
+        return NULL;
     }
-    if (res < 0)
+    res = setsockopt(s->sock_fd, level, optname,
+                        optval.buf, (int)optval.len);
+#else
+    res = setsockopt(s->sock_fd, level, optname, optval.buf, optval.len);
+#endif
+    PyBuffer_Release(&optval);
+
+done:
+    if (res < 0) {
         return s->errorhandler();
-    Py_INCREF(Py_None);
-    return Py_None;
+    }
+
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(setsockopt_doc,
-"setsockopt(level, option, value)\n\
+"setsockopt(level, option, value: int)\n\
+setsockopt(level, option, value: buffer)\n\
+setsockopt(level, option, None, optlen: int)\n\
 \n\
 Set a socket option.  See the Unix manual for level and option.\n\
-The value argument can either be an integer or a string.");
+The value argument can either be an integer, a string buffer, or \n\
+None, optlen.");
 
 
 /* s.getsockopt() method.
@@ -2541,16 +2721,22 @@ static PyObject *
 sock_close(PySocketSockObject *s)
 {
     SOCKET_T fd;
+    int res;
 
-    /* We do not want to retry upon EINTR: see http://lwn.net/Articles/576478/
-     * and http://linux.derkeiler.com/Mailing-Lists/Kernel/2005-09/3000.html
-     * for more details.
-     */
-    if ((fd = s->sock_fd) != -1) {
-        s->sock_fd = -1;
+    fd = s->sock_fd;
+    if (fd != INVALID_SOCKET) {
+        s->sock_fd = INVALID_SOCKET;
+
+        /* We do not want to retry upon EINTR: see
+           http://lwn.net/Articles/576478/ and
+           http://linux.derkeiler.com/Mailing-Lists/Kernel/2005-09/3000.html
+           for more details. */
         Py_BEGIN_ALLOW_THREADS
-        (void) SOCKETCLOSE(fd);
+        res = SOCKETCLOSE(fd);
         Py_END_ALLOW_THREADS
+        if (res < 0) {
+            return s->errorhandler();
+        }
     }
     Py_INCREF(Py_None);
     return Py_None;
@@ -2565,7 +2751,7 @@ static PyObject *
 sock_detach(PySocketSockObject *s)
 {
     SOCKET_T fd = s->sock_fd;
-    s->sock_fd = -1;
+    s->sock_fd = INVALID_SOCKET;
     return PyLong_FromSocket_t(fd);
 }
 
@@ -3733,6 +3919,63 @@ struct sock_sendmsg {
 };
 
 static int
+sock_sendmsg_iovec(PySocketSockObject *s, PyObject *data_arg,
+                   struct msghdr *msg,
+                   Py_buffer **databufsout, Py_ssize_t *ndatabufsout) {
+    Py_ssize_t ndataparts, ndatabufs = 0;
+    int result = -1;
+    struct iovec *iovs = NULL;
+    PyObject *data_fast = NULL;
+    Py_buffer *databufs = NULL;
+
+    /* Fill in an iovec for each message part, and save the Py_buffer
+       structs to release afterwards. */
+    data_fast = PySequence_Fast(data_arg,
+                                "sendmsg() argument 1 must be an "
+                                "iterable");
+    if (data_fast == NULL) {
+        goto finally;
+    }
+
+    ndataparts = PySequence_Fast_GET_SIZE(data_fast);
+    if (ndataparts > INT_MAX) {
+        PyErr_SetString(PyExc_OSError, "sendmsg() argument 1 is too long");
+        goto finally;
+    }
+
+    msg->msg_iovlen = ndataparts;
+    if (ndataparts > 0) {
+        iovs = PyMem_New(struct iovec, ndataparts);
+        if (iovs == NULL) {
+            PyErr_NoMemory();
+            goto finally;
+        }
+        msg->msg_iov = iovs;
+
+        databufs = PyMem_New(Py_buffer, ndataparts);
+        if (databufs == NULL) {
+            PyErr_NoMemory();
+            goto finally;
+        }
+    }
+    for (; ndatabufs < ndataparts; ndatabufs++) {
+        if (!PyArg_Parse(PySequence_Fast_GET_ITEM(data_fast, ndatabufs),
+                         "y*;sendmsg() argument 1 must be an iterable of "
+                         "bytes-like objects",
+                         &databufs[ndatabufs]))
+            goto finally;
+        iovs[ndatabufs].iov_base = databufs[ndatabufs].buf;
+        iovs[ndatabufs].iov_len = databufs[ndatabufs].len;
+    }
+    result = 0;
+  finally:
+    *databufsout = databufs;
+    *ndatabufsout = ndatabufs;
+    Py_XDECREF(data_fast);
+    return result;
+}
+
+static int
 sock_sendmsg_impl(PySocketSockObject *s, void *data)
 {
     struct sock_sendmsg *ctx = data;
@@ -3746,11 +3989,10 @@ sock_sendmsg_impl(PySocketSockObject *s, void *data)
 static PyObject *
 sock_sendmsg(PySocketSockObject *s, PyObject *args)
 {
-    Py_ssize_t i, ndataparts, ndatabufs = 0, ncmsgs, ncmsgbufs = 0;
+    Py_ssize_t i, ndatabufs = 0, ncmsgs, ncmsgbufs = 0;
     Py_buffer *databufs = NULL;
-    struct iovec *iovs = NULL;
     sock_addr_t addrbuf;
-    struct msghdr msg = {0};
+    struct msghdr msg;
     struct cmsginfo {
         int level;
         int type;
@@ -3759,13 +4001,16 @@ sock_sendmsg(PySocketSockObject *s, PyObject *args)
     void *controlbuf = NULL;
     size_t controllen, controllen_last;
     int addrlen, flags = 0;
-    PyObject *data_arg, *cmsg_arg = NULL, *addr_arg = NULL, *data_fast = NULL,
+    PyObject *data_arg, *cmsg_arg = NULL, *addr_arg = NULL,
         *cmsg_fast = NULL, *retval = NULL;
     struct sock_sendmsg ctx;
 
     if (!PyArg_ParseTuple(args, "O|OiO:sendmsg",
-                          &data_arg, &cmsg_arg, &flags, &addr_arg))
+                          &data_arg, &cmsg_arg, &flags, &addr_arg)) {
         return NULL;
+    }
+
+    memset(&msg, 0, sizeof(msg));
 
     /* Parse destination address. */
     if (addr_arg != NULL && addr_arg != Py_None) {
@@ -3777,30 +4022,8 @@ sock_sendmsg(PySocketSockObject *s, PyObject *args)
 
     /* Fill in an iovec for each message part, and save the Py_buffer
        structs to release afterwards. */
-    if ((data_fast = PySequence_Fast(data_arg,
-                                     "sendmsg() argument 1 must be an "
-                                     "iterable")) == NULL)
+    if (sock_sendmsg_iovec(s, data_arg, &msg, &databufs, &ndatabufs) == -1) {
         goto finally;
-    ndataparts = PySequence_Fast_GET_SIZE(data_fast);
-    if (ndataparts > INT_MAX) {
-        PyErr_SetString(PyExc_OSError, "sendmsg() argument 1 is too long");
-        goto finally;
-    }
-    msg.msg_iovlen = ndataparts;
-    if (ndataparts > 0 &&
-        ((msg.msg_iov = iovs = PyMem_New(struct iovec, ndataparts)) == NULL ||
-         (databufs = PyMem_New(Py_buffer, ndataparts)) == NULL)) {
-        PyErr_NoMemory();
-        goto finally;
-    }
-    for (; ndatabufs < ndataparts; ndatabufs++) {
-        if (!PyArg_Parse(PySequence_Fast_GET_ITEM(data_fast, ndatabufs),
-                         "y*;sendmsg() argument 1 must be an iterable of "
-                         "bytes-like objects",
-                         &databufs[ndatabufs]))
-            goto finally;
-        iovs[ndatabufs].iov_base = databufs[ndatabufs].buf;
-        iovs[ndatabufs].iov_len = databufs[ndatabufs].len;
     }
 
     if (cmsg_arg == NULL)
@@ -3859,11 +4082,13 @@ sock_sendmsg(PySocketSockObject *s, PyObject *args)
     if (ncmsgbufs > 0) {
         struct cmsghdr *cmsgh = NULL;
 
-        if ((msg.msg_control = controlbuf =
-             PyMem_Malloc(controllen)) == NULL) {
+        controlbuf = PyMem_Malloc(controllen);
+        if (controlbuf == NULL) {
             PyErr_NoMemory();
             goto finally;
         }
+        msg.msg_control = controlbuf;
+
         msg.msg_controllen = controllen;
 
         /* Need to zero out the buffer as a workaround for glibc's
@@ -3928,11 +4153,11 @@ finally:
         PyBuffer_Release(&cmsgs[i].data);
     PyMem_Free(cmsgs);
     Py_XDECREF(cmsg_fast);
-    for (i = 0; i < ndatabufs; i++)
+    PyMem_Free(msg.msg_iov);
+    for (i = 0; i < ndatabufs; i++) {
         PyBuffer_Release(&databufs[i]);
+    }
     PyMem_Free(databufs);
-    PyMem_Free(iovs);
-    Py_XDECREF(data_fast);
     return retval;
 }
 
@@ -3954,6 +4179,171 @@ the message.  The return value is the number of bytes of non-ancillary\n\
 data sent.");
 #endif    /* CMSG_LEN */
 
+#ifdef HAVE_SOCKADDR_ALG
+static PyObject*
+sock_sendmsg_afalg(PySocketSockObject *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *retval = NULL;
+
+    Py_ssize_t i, ndatabufs = 0;
+    Py_buffer *databufs = NULL;
+    PyObject *data_arg = NULL;
+
+    Py_buffer iv = {NULL, NULL};
+
+    PyObject *opobj = NULL;
+    int op = -1;
+
+    PyObject *assoclenobj = NULL;
+    int assoclen = -1;
+
+    unsigned int *uiptr;
+    int flags = 0;
+
+    struct msghdr msg;
+    struct cmsghdr *header = NULL;
+    struct af_alg_iv *alg_iv = NULL;
+    struct sock_sendmsg ctx;
+    Py_ssize_t controllen;
+    void *controlbuf = NULL;
+    static char *keywords[] = {"msg", "op", "iv", "assoclen", "flags", 0};
+
+    if (self->sock_family != AF_ALG) {
+        PyErr_SetString(PyExc_OSError,
+                        "algset is only supported for AF_ALG");
+        return NULL;
+    }
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds,
+                                     "|O$O!y*O!i:sendmsg_afalg", keywords,
+                                     &data_arg,
+                                     &PyLong_Type, &opobj, &iv,
+                                     &PyLong_Type, &assoclenobj, &flags)) {
+        return NULL;
+    }
+
+    memset(&msg, 0, sizeof(msg));
+
+    /* op is a required, keyword-only argument >= 0 */
+    if (opobj != NULL) {
+        op = _PyLong_AsInt(opobj);
+    }
+    if (op < 0) {
+        /* override exception from _PyLong_AsInt() */
+        PyErr_SetString(PyExc_TypeError,
+                        "Invalid or missing argument 'op'");
+        goto finally;
+    }
+    /* assoclen is optional but must be >= 0 */
+    if (assoclenobj != NULL) {
+        assoclen = _PyLong_AsInt(assoclenobj);
+        if (assoclen == -1 && PyErr_Occurred()) {
+            goto finally;
+        }
+        if (assoclen < 0) {
+            PyErr_SetString(PyExc_TypeError,
+                            "assoclen must be positive");
+            goto finally;
+        }
+    }
+
+    controllen = CMSG_SPACE(4);
+    if (iv.buf != NULL) {
+        controllen += CMSG_SPACE(sizeof(*alg_iv) + iv.len);
+    }
+    if (assoclen >= 0) {
+        controllen += CMSG_SPACE(4);
+    }
+
+    controlbuf = PyMem_Malloc(controllen);
+    if (controlbuf == NULL) {
+        PyErr_NoMemory();
+        goto finally;
+    }
+    memset(controlbuf, 0, controllen);
+
+    msg.msg_controllen = controllen;
+    msg.msg_control = controlbuf;
+
+    /* Fill in an iovec for each message part, and save the Py_buffer
+       structs to release afterwards. */
+    if (data_arg != NULL) {
+        if (sock_sendmsg_iovec(self, data_arg, &msg, &databufs, &ndatabufs) == -1) {
+            goto finally;
+        }
+    }
+
+    /* set operation to encrypt or decrypt */
+    header = CMSG_FIRSTHDR(&msg);
+    if (header == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "unexpected NULL result from CMSG_FIRSTHDR");
+        goto finally;
+    }
+    header->cmsg_level = SOL_ALG;
+    header->cmsg_type = ALG_SET_OP;
+    header->cmsg_len = CMSG_LEN(4);
+    uiptr = (void*)CMSG_DATA(header);
+    *uiptr = (unsigned int)op;
+
+    /* set initialization vector */
+    if (iv.buf != NULL) {
+        header = CMSG_NXTHDR(&msg, header);
+        if (header == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "unexpected NULL result from CMSG_NXTHDR(iv)");
+            goto finally;
+        }
+        header->cmsg_level = SOL_ALG;
+        header->cmsg_type = ALG_SET_IV;
+        header->cmsg_len = CMSG_SPACE(sizeof(*alg_iv) + iv.len);
+        alg_iv = (void*)CMSG_DATA(header);
+        alg_iv->ivlen = iv.len;
+        memcpy(alg_iv->iv, iv.buf, iv.len);
+    }
+
+    /* set length of associated data for AEAD */
+    if (assoclen >= 0) {
+        header = CMSG_NXTHDR(&msg, header);
+        if (header == NULL) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "unexpected NULL result from CMSG_NXTHDR(assoc)");
+            goto finally;
+        }
+        header->cmsg_level = SOL_ALG;
+        header->cmsg_type = ALG_SET_AEAD_ASSOCLEN;
+        header->cmsg_len = CMSG_LEN(4);
+        uiptr = (void*)CMSG_DATA(header);
+        *uiptr = (unsigned int)assoclen;
+    }
+
+    ctx.msg = &msg;
+    ctx.flags = flags;
+    if (sock_call(self, 1, sock_sendmsg_impl, &ctx) < 0) {
+        goto finally;
+    }
+
+    retval = PyLong_FromSsize_t(ctx.result);
+
+  finally:
+    PyMem_Free(controlbuf);
+    if (iv.buf != NULL) {
+        PyBuffer_Release(&iv);
+    }
+    PyMem_Free(msg.msg_iov);
+    for (i = 0; i < ndatabufs; i++) {
+        PyBuffer_Release(&databufs[i]);
+    }
+    PyMem_Free(databufs);
+    return retval;
+}
+
+PyDoc_STRVAR(sendmsg_afalg_doc,
+"sendmsg_afalg([msg], *, op[, iv[, assoclen[, flags=MSG_MORE]]])\n\
+\n\
+Set operation mode, IV and length of associated data for an AF_ALG\n\
+operation socket.");
+#endif
 
 /* s.shutdown(how) method */
 
@@ -4012,6 +4402,17 @@ sock_ioctl(PySocketSockObject *s, PyObject *arg)
             return set_error();
         }
         return PyLong_FromUnsignedLong(recv); }
+#if defined(SIO_LOOPBACK_FAST_PATH)
+    case SIO_LOOPBACK_FAST_PATH: {
+        unsigned int option;
+        if (!PyArg_ParseTuple(arg, "kI:ioctl", &cmd, &option))
+            return NULL;
+        if (WSAIoctl(s->sock_fd, cmd, &option, sizeof(option),
+                         NULL, 0, &recv, NULL, NULL) == SOCKET_ERROR) {
+            return set_error();
+        }
+        return PyLong_FromUnsignedLong(recv); }
+#endif
     default:
         PyErr_Format(PyExc_ValueError, "invalid ioctl command %d", cmd);
         return NULL;
@@ -4022,7 +4423,8 @@ PyDoc_STRVAR(sock_ioctl_doc,
 \n\
 Control the socket with WSAIoctl syscall. Currently supported 'cmd' values are\n\
 SIO_RCVALL:  'option' must be one of the socket.RCVALL_* constants.\n\
-SIO_KEEPALIVE_VALS:  'option' is a tuple of (onoff, timeout, interval).");
+SIO_KEEPALIVE_VALS:  'option' is a tuple of (onoff, timeout, interval).\n\
+SIO_LOOPBACK_FAST_PATH: 'option' is a boolean value, and is disabled by default");
 #endif
 
 #if defined(MS_WINDOWS)
@@ -4121,6 +4523,10 @@ static PyMethodDef sock_methods[] = {
     {"sendmsg",           (PyCFunction)sock_sendmsg, METH_VARARGS,
                       sendmsg_doc},
 #endif
+#ifdef HAVE_SOCKADDR_ALG
+    {"sendmsg_afalg",     (PyCFunction)sock_sendmsg_afalg, METH_VARARGS | METH_KEYWORDS,
+                      sendmsg_afalg_doc},
+#endif
     {NULL,                      NULL}           /* sentinel */
 };
 
@@ -4141,22 +4547,45 @@ static PyGetSetDef sock_getsetlist[] = {
    First close the file description. */
 
 static void
+sock_finalize(PySocketSockObject *s)
+{
+    SOCKET_T fd;
+    PyObject *error_type, *error_value, *error_traceback;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    if (s->sock_fd != INVALID_SOCKET) {
+        if (PyErr_ResourceWarning((PyObject *)s, 1, "unclosed %R", s)) {
+            /* Spurious errors can appear at shutdown */
+            if (PyErr_ExceptionMatches(PyExc_Warning)) {
+                PyErr_WriteUnraisable((PyObject *)s);
+            }
+        }
+
+        /* Only close the socket *after* logging the ResourceWarning warning
+           to allow the logger to call socket methods like
+           socket.getsockname(). If the socket is closed before, socket
+           methods fails with the EBADF error. */
+        fd = s->sock_fd;
+        s->sock_fd = INVALID_SOCKET;
+
+        /* We do not want to retry upon EINTR: see sock_close() */
+        Py_BEGIN_ALLOW_THREADS
+        (void) SOCKETCLOSE(fd);
+        Py_END_ALLOW_THREADS
+    }
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+}
+
+static void
 sock_dealloc(PySocketSockObject *s)
 {
-    if (s->sock_fd != -1) {
-        PyObject *exc, *val, *tb;
-        Py_ssize_t old_refcount = Py_REFCNT(s);
-        ++Py_REFCNT(s);
-        PyErr_Fetch(&exc, &val, &tb);
-        if (PyErr_WarnFormat(PyExc_ResourceWarning, 1,
-                             "unclosed %R", s))
-            /* Spurious errors can appear at shutdown */
-            if (PyErr_ExceptionMatches(PyExc_Warning))
-                PyErr_WriteUnraisable((PyObject *) s);
-        PyErr_Restore(exc, val, tb);
-        (void) SOCKETCLOSE(s->sock_fd);
-        Py_REFCNT(s) = old_refcount;
-    }
+    if (PyObject_CallFinalizerFromDealloc((PyObject *)s) < 0)
+        return;
+
     Py_TYPE(s)->tp_free((PyObject *)s);
 }
 
@@ -4199,7 +4628,7 @@ sock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     new = type->tp_alloc(type, 0);
     if (new != NULL) {
-        ((PySocketSockObject *)new)->sock_fd = -1;
+        ((PySocketSockObject *)new)->sock_fd = INVALID_SOCKET;
         ((PySocketSockObject *)new)->sock_timeout = _PyTime_FromSeconds(-1);
         ((PySocketSockObject *)new)->errorhandler = &set_error;
     }
@@ -4344,7 +4773,10 @@ sock_initobj(PyObject *self, PyObject *args, PyObject *kwds)
         }
 #endif
     }
-    init_sockobject(s, fd, family, type, proto);
+    if (init_sockobject(s, fd, family, type, proto) == -1) {
+        SOCKETCLOSE(fd);
+        return -1;
+    }
 
     return 0;
 
@@ -4373,7 +4805,8 @@ static PyTypeObject sock_type = {
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
+        | Py_TPFLAGS_HAVE_FINALIZE,             /* tp_flags */
     sock_doc,                                   /* tp_doc */
     0,                                          /* tp_traverse */
     0,                                          /* tp_clear */
@@ -4393,6 +4826,15 @@ static PyTypeObject sock_type = {
     PyType_GenericAlloc,                        /* tp_alloc */
     sock_new,                                   /* tp_new */
     PyObject_Del,                               /* tp_free */
+    0,                                          /* tp_is_gc */
+    0,                                          /* tp_bases */
+    0,                                          /* tp_mro */
+    0,                                          /* tp_cache */
+    0,                                          /* tp_subclasses */
+    0,                                          /* tp_weaklist */
+    0,                                          /* tp_del */
+    0,                                          /* tp_version_tag */
+    (destructor)sock_finalize,                  /* tp_finalize */
 };
 
 
@@ -4519,6 +4961,19 @@ PyDoc_STRVAR(gethostbyname_doc,
 Return the IP address (a string of the form '255.255.255.255') for a host.");
 
 
+static PyObject*
+sock_decode_hostname(const char *name)
+{
+#ifdef MS_WINDOWS
+    /* Issue #26227: gethostbyaddr() returns a string encoded
+     * to the ANSI code page */
+    return PyUnicode_DecodeFSDefault(name);
+#else
+    /* Decode from UTF-8 */
+    return PyUnicode_FromString(name);
+#endif
+}
+
 /* Convenience function common to gethostbyname_ex and gethostbyaddr */
 
 static PyObject *
@@ -4529,6 +4984,7 @@ gethost_common(struct hostent *h, struct sockaddr *addr, size_t alen, int af)
     PyObject *name_list = (PyObject *)NULL;
     PyObject *addr_list = (PyObject *)NULL;
     PyObject *tmp;
+    PyObject *name;
 
     if (h == NULL) {
         /* Let's get real error message to return */
@@ -4637,7 +5093,10 @@ gethost_common(struct hostent *h, struct sockaddr *addr, size_t alen, int af)
             goto err;
     }
 
-    rtn_tuple = Py_BuildValue("sOO", h->h_name, name_list, addr_list);
+    name = sock_decode_hostname(h->h_name);
+    if (name == NULL)
+        goto err;
+    rtn_tuple = Py_BuildValue("NOO", name, name_list, addr_list);
 
  err:
     Py_XDECREF(name_list);
@@ -5411,10 +5870,6 @@ socket_inet_ntop(PyObject *self, PyObject *args)
     } else {
         return PyUnicode_FromString(retval);
     }
-
-    /* NOTREACHED */
-    PyErr_SetString(PyExc_RuntimeError, "invalid handling of inet_ntop");
-    return NULL;
 }
 
 #elif defined(MS_WINDOWS)
@@ -5534,7 +5989,7 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
         PyOS_snprintf(pbuf, sizeof(pbuf), "%ld", value);
         pptr = pbuf;
     } else if (PyUnicode_Check(pobj)) {
-        pptr = _PyUnicode_AsString(pobj);
+        pptr = PyUnicode_AsUTF8(pobj);
         if (pptr == NULL)
             goto err;
     } else if (PyBytes_Check(pobj)) {
@@ -5623,6 +6078,7 @@ socket_getnameinfo(PyObject *self, PyObject *args)
     struct addrinfo hints, *res = NULL;
     int error;
     PyObject *ret = (PyObject *)NULL;
+    PyObject *name;
 
     flags = flowinfo = scope_id = 0;
     if (!PyArg_ParseTuple(args, "Oi:getnameinfo", &sa, &flags))
@@ -5686,7 +6142,11 @@ socket_getnameinfo(PyObject *self, PyObject *args)
         set_gaierror(error);
         goto fail;
     }
-    ret = Py_BuildValue("ss", hbuf, pbuf);
+
+    name = sock_decode_hostname(hbuf);
+    if (name == NULL)
+        goto fail;
+    ret = Py_BuildValue("Ns", name, pbuf);
 
 fail:
     if (res)
@@ -6143,9 +6603,6 @@ PyInit__socket(void)
     PyModule_AddIntMacro(m, AF_UNSPEC);
 #endif
     PyModule_AddIntMacro(m, AF_INET);
-#ifdef AF_INET6
-    PyModule_AddIntMacro(m, AF_INET6);
-#endif /* AF_INET6 */
 #if defined(AF_UNIX)
     PyModule_AddIntMacro(m, AF_UNIX);
 #endif /* AF_UNIX */
@@ -6175,6 +6632,9 @@ PyInit__socket(void)
 #ifdef AF_AAL5
     /* Reserved for Werner's ATM */
     PyModule_AddIntMacro(m, AF_AAL5);
+#endif
+#ifdef HAVE_SOCKADDR_ALG
+    PyModule_AddIntMacro(m, AF_ALG); /* Linux crypto */
 #endif
 #ifdef AF_X25
     /* Reserved for X.25 project */
@@ -6236,6 +6696,9 @@ PyInit__socket(void)
 #endif
 #ifdef NETLINK_TAPBASE
     PyModule_AddIntMacro(m, NETLINK_TAPBASE);
+#endif
+#ifdef NETLINK_CRYPTO
+    PyModule_AddIntMacro(m, NETLINK_CRYPTO);
 #endif
 #endif /* AF_NETLINK */
 #ifdef AF_ROUTE
@@ -6390,11 +6853,30 @@ PyInit__socket(void)
     PyModule_AddIntMacro(m, TIPC_TOP_SRV);
 #endif
 
+#ifdef HAVE_SOCKADDR_ALG
+    /* Socket options */
+    PyModule_AddIntMacro(m, ALG_SET_KEY);
+    PyModule_AddIntMacro(m, ALG_SET_IV);
+    PyModule_AddIntMacro(m, ALG_SET_OP);
+    PyModule_AddIntMacro(m, ALG_SET_AEAD_ASSOCLEN);
+    PyModule_AddIntMacro(m, ALG_SET_AEAD_AUTHSIZE);
+    PyModule_AddIntMacro(m, ALG_SET_PUBKEY);
+
+    /* Operations */
+    PyModule_AddIntMacro(m, ALG_OP_DECRYPT);
+    PyModule_AddIntMacro(m, ALG_OP_ENCRYPT);
+    PyModule_AddIntMacro(m, ALG_OP_SIGN);
+    PyModule_AddIntMacro(m, ALG_OP_VERIFY);
+#endif
+
     /* Socket types */
     PyModule_AddIntMacro(m, SOCK_STREAM);
     PyModule_AddIntMacro(m, SOCK_DGRAM);
 /* We have incomplete socket support. */
+#ifdef SOCK_RAW
+    /* SOCK_RAW is marked as optional in the POSIX specification */
     PyModule_AddIntMacro(m, SOCK_RAW);
+#endif
     PyModule_AddIntMacro(m, SOCK_SEQPACKET);
 #if defined(SOCK_RDM)
     PyModule_AddIntMacro(m, SOCK_RDM);
@@ -6437,8 +6919,10 @@ PyInit__socket(void)
 #ifdef  SO_OOBINLINE
     PyModule_AddIntMacro(m, SO_OOBINLINE);
 #endif
+#ifndef __GNU__
 #ifdef  SO_REUSEPORT
     PyModule_AddIntMacro(m, SO_REUSEPORT);
+#endif
 #endif
 #ifdef  SO_SNDBUF
     PyModule_AddIntMacro(m, SO_SNDBUF);
@@ -6476,6 +6960,12 @@ PyInit__socket(void)
 #ifdef  LOCAL_PEERCRED
     PyModule_AddIntMacro(m, LOCAL_PEERCRED);
 #endif
+#ifdef  SO_PASSSEC
+    PyModule_AddIntMacro(m, SO_PASSSEC);
+#endif
+#ifdef  SO_PEERSEC
+    PyModule_AddIntMacro(m, SO_PEERSEC);
+#endif
 #ifdef  SO_BINDTODEVICE
     PyModule_AddIntMacro(m, SO_BINDTODEVICE);
 #endif
@@ -6485,6 +6975,12 @@ PyInit__socket(void)
 #ifdef  SO_MARK
     PyModule_AddIntMacro(m, SO_MARK);
 #endif
+#ifdef SO_DOMAIN
+    PyModule_AddIntMacro(m, SO_DOMAIN);
+#endif
+#ifdef SO_PROTOCOL
+    PyModule_AddIntMacro(m, SO_PROTOCOL);
+#endif
 
     /* Maximum number of connections for "listen" */
 #ifdef  SOMAXCONN
@@ -6493,7 +6989,7 @@ PyInit__socket(void)
     PyModule_AddIntConstant(m, "SOMAXCONN", 5); /* Common value */
 #endif
 
-    /* Ancilliary message types */
+    /* Ancillary message types */
 #ifdef  SCM_RIGHTS
     PyModule_AddIntMacro(m, SCM_RIGHTS);
 #endif
@@ -6642,6 +7138,9 @@ PyInit__socket(void)
 #endif
 #ifdef SOL_RDS
     PyModule_AddIntMacro(m, SOL_RDS);
+#endif
+#ifdef HAVE_SOCKADDR_ALG
+    PyModule_AddIntMacro(m, SOL_ALG);
 #endif
 #ifdef RDS_CANCEL_SENT_TO
     PyModule_AddIntMacro(m, RDS_CANCEL_SENT_TO);
@@ -7013,6 +7512,12 @@ PyInit__socket(void)
 #ifdef  TCP_FASTOPEN
     PyModule_AddIntMacro(m, TCP_FASTOPEN);
 #endif
+#ifdef  TCP_CONGESTION
+    PyModule_AddIntMacro(m, TCP_CONGESTION);
+#endif
+#ifdef  TCP_USER_TIMEOUT
+    PyModule_AddIntMacro(m, TCP_USER_TIMEOUT);
+#endif
 
     /* IPX options */
 #ifdef  IPX_TYPE
@@ -7180,8 +7685,16 @@ PyInit__socket(void)
 
 #ifdef SIO_RCVALL
     {
-        DWORD codes[] = {SIO_RCVALL, SIO_KEEPALIVE_VALS};
-        const char *names[] = {"SIO_RCVALL", "SIO_KEEPALIVE_VALS"};
+        DWORD codes[] = {SIO_RCVALL, SIO_KEEPALIVE_VALS,
+#if defined(SIO_LOOPBACK_FAST_PATH)
+            SIO_LOOPBACK_FAST_PATH
+#endif
+        };
+        const char *names[] = {"SIO_RCVALL", "SIO_KEEPALIVE_VALS",
+#if defined(SIO_LOOPBACK_FAST_PATH)
+            "SIO_LOOPBACK_FAST_PATH"
+#endif
+        };
         int i;
         for(i = 0; i<Py_ARRAY_LENGTH(codes); ++i) {
             PyObject *tmp;

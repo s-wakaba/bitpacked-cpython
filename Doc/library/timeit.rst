@@ -4,17 +4,16 @@
 .. module:: timeit
    :synopsis: Measure the execution time of small code snippets.
 
+**Source code:** :source:`Lib/timeit.py`
 
 .. index::
    single: Benchmarking
    single: Performance
 
-**Source code:** :source:`Lib/timeit.py`
-
 --------------
 
 This module provides a simple way to time small bits of Python code. It has both
-a :ref:`command-line-interface` as well as a :ref:`callable <python-interface>`
+a :ref:`timeit-command-line-interface` as well as a :ref:`callable <python-interface>`
 one.  It avoids a number of common traps for measuring execution times.
 See also Tim Peters' introduction to the "Algorithms" chapter in the *Python
 Cookbook*, published by O'Reilly.
@@ -23,7 +22,7 @@ Cookbook*, published by O'Reilly.
 Basic Examples
 --------------
 
-The following example shows how the :ref:`command-line-interface`
+The following example shows how the :ref:`timeit-command-line-interface`
 can be used to compare three different expressions:
 
 .. code-block:: sh
@@ -101,8 +100,8 @@ The module defines three convenience functions and a public class:
    can be controlled by passing a namespace to *globals*.
 
    To measure the execution time of the first statement, use the :meth:`.timeit`
-   method.  The :meth:`.repeat` method is a convenience to call :meth:`.timeit`
-   multiple times and return a list of results.
+   method.  The :meth:`.repeat` and :meth:`.autorange` methods are convenience
+   methods to call :meth:`.timeit` multiple times.
 
    The execution time of *setup* is excluded from the overall timed execution run.
 
@@ -133,6 +132,23 @@ The module defines three convenience functions and a public class:
          statement in the *setup* string.  For example::
 
             timeit.Timer('for i in range(10): oct(i)', 'gc.enable()').timeit()
+
+
+    .. method:: Timer.autorange(callback=None)
+
+       Automatically determine how many times to call :meth:`.timeit`.
+
+       This is a convenience function that calls :meth:`.timeit` repeatedly
+       so that the total time >= 0.2 second, returning the eventual
+       (number of loops, time taken for that number of loops). It calls
+       :meth:`.timeit` with *number* set to successive powers of ten (10,
+       100, 1000, ...) up to a maximum of one billion, until the time taken
+       is at least 0.2 second, or the maximum is reached.
+
+        If *callback* is given and is not ``None``, it will be called after
+        each trial with two arguments: ``callback(number, time_taken)``.
+
+        .. versionadded:: 3.6
 
 
    .. method:: Timer.repeat(repeat=3, number=1000000)
@@ -174,7 +190,7 @@ The module defines three convenience functions and a public class:
       where the traceback is sent; it defaults to :data:`sys.stderr`.
 
 
-.. _command-line-interface:
+.. _timeit-command-line-interface:
 
 Command-Line Interface
 ----------------------

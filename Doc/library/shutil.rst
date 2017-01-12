@@ -3,14 +3,15 @@
 
 .. module:: shutil
    :synopsis: High-level file operations, including copying.
+
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. partly based on the docstrings
+
+**Source code:** :source:`Lib/shutil.py`
 
 .. index::
    single: file; copying
    single: copying files
-
-**Source code:** :source:`Lib/shutil.py`
 
 --------------
 
@@ -106,7 +107,7 @@ Directory and files operations
    If *follow_symlinks* is false, and *src* and *dst* both
    refer to symbolic links, :func:`copystat` will operate on
    the symbolic links themselves rather than the files the
-   symbolic links refer to--reading the information from the
+   symbolic links refer to—reading the information from the
    *src* symbolic link, and writing the information to the
    *dst* symbolic link.
 
@@ -342,7 +343,7 @@ Directory and files operations
    Return the path to an executable which would be run if the given *cmd* was
    called.  If no *cmd* would be called, return ``None``.
 
-   *mode* is a permission mask passed a to :func:`os.access`, by default
+   *mode* is a permission mask passed to :func:`os.access`, by default
    determining if the file exists and executable.
 
    When no *path* is specified, the results of :func:`os.environ` are used,
@@ -424,7 +425,7 @@ Another example that uses the *ignore* argument to add a logging call::
    import logging
 
    def _logpath(path, names):
-       logging.info('Working in %s' % path)
+       logging.info('Working in %s', path)
        return []   # nothing will be ignored
 
    copytree(source, destination, ignore=_logpath)
@@ -602,7 +603,9 @@ found in the :file:`.ssh` directory of the user::
     >>> make_archive(archive_name, 'gztar', root_dir)
     '/Users/tarek/myarchive.tar.gz'
 
-The resulting archive contains::
+The resulting archive contains:
+
+.. code-block:: shell-session
 
     $ tar -tzvf /Users/tarek/myarchive.tar.gz
     drwx------ tarek/staff       0 2010-02-01 16:23:40 ./

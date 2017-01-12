@@ -876,7 +876,7 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         self.assertEqual(Frag().__int__(), 42)
         self.assertEqual(int(Frag()), 42)
 
-    def test_diamond_inheritence(self):
+    def test_diamond_inheritance(self):
         # Testing multiple inheritance special cases...
         class A(object):
             def spam(self): return "A"
@@ -3489,7 +3489,7 @@ order (MRO) for bases """
         b.a = a
         z = deepcopy(a) # This blew up before
 
-    def test_unintialized_modules(self):
+    def test_uninitialized_modules(self):
         # Testing uninitialized module objects...
         from types import ModuleType as M
         m = M.__new__(M)
@@ -4738,11 +4738,8 @@ class PicklingTests(unittest.TestCase):
                 return (args, kwargs)
         obj = C3()
         for proto in protocols:
-            if proto >= 4:
+            if proto >= 2:
                 self._check_reduce(proto, obj, args, kwargs)
-            elif proto >= 2:
-                with self.assertRaises(ValueError):
-                    obj.__reduce_ex__(proto)
 
         class C4:
             def __getnewargs_ex__(self):
@@ -5061,10 +5058,6 @@ class PicklingTests(unittest.TestCase):
                 kwargs = getattr(cls, 'KWARGS', {})
                 obj = cls(*cls.ARGS, **kwargs)
                 proto = pickle_copier.proto
-                if 2 <= proto < 4 and hasattr(cls, '__getnewargs_ex__'):
-                    with self.assertRaises(ValueError):
-                        pickle_copier.dumps(obj, proto)
-                    continue
                 objcopy = pickle_copier.copy(obj)
                 self._assert_is_copy(obj, objcopy)
                 # For test classes that supports this, make sure we didn't go
@@ -5092,6 +5085,23 @@ class PicklingTests(unittest.TestCase):
                     objcopy2 = deepcopy(objcopy)
                     self._assert_is_copy(obj, objcopy2)
 
+    def test_issue24097(self):
+        # Slot name is freed inside __getattr__ and is later used.
+        class S(str):  # Not interned
+            pass
+        class A:
+            __slotnames__ = [S('spam')]
+            def __getattr__(self, attr):
+                if attr == 'spam':
+                    A.__slotnames__[:] = [S('spam')]
+                    return 42
+                else:
+                    raise AttributeError
+
+        import copyreg
+        expected = (copyreg.__newobj__, (A,), (None, {'spam': 42}), None, None)
+        self.assertEqual(A().__reduce__(2), expected)  # Shouldn't crash
+
 
 class SharedKeyTests(unittest.TestCase):
 
@@ -5106,12 +5116,14 @@ class SharedKeyTests(unittest.TestCase):
         a, b = A(), B()
         self.assertEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(b)))
         self.assertLess(sys.getsizeof(vars(a)), sys.getsizeof({}))
-        a.x, a.y, a.z, a.w = range(4)
+        # Initial hash table can contain at most 5 elements.
+        # Set 6 attributes to cause internal resizing.
+        a.x, a.y, a.z, a.w, a.v, a.u = range(6)
         self.assertNotEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(b)))
         a2 = A()
         self.assertEqual(sys.getsizeof(vars(a)), sys.getsizeof(vars(a2)))
         self.assertLess(sys.getsizeof(vars(a)), sys.getsizeof({}))
-        b.u, b.v, b.w, b.t = range(4)
+        b.u, b.v, b.w, b.t, b.s, b.r = range(6)
         self.assertLess(sys.getsizeof(vars(b)), sys.getsizeof({}))
 
 

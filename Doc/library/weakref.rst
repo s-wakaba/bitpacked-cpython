@@ -3,6 +3,7 @@
 
 .. module:: weakref
    :synopsis: Support for weak references and weak dictionaries.
+
 .. moduleauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. moduleauthor:: Neil Schemenauer <nas@arctrix.com>
 .. moduleauthor:: Martin von Löwis <martin@loewis.home.cs.tu-berlin.de>
@@ -329,7 +330,7 @@ These method have the same issues as the and :meth:`keyrefs` method of
 
 .. seealso::
 
-   :pep:`0205` - Weak References
+   :pep:`205` - Weak References
       The proposal and rationale for this feature, including links to earlier
       implementations and information about similar features in other languages.
 
@@ -413,7 +414,7 @@ the referent is accessed::
 Example
 -------
 
-This simple example shows how an application can use objects IDs to retrieve
+This simple example shows how an application can use object IDs to retrieve
 objects that it has seen before.  The IDs of the objects can then be used in
 other data structures without forcing the objects to remain alive, but the
 objects can still be retrieved by ID if they do.

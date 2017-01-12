@@ -23,9 +23,10 @@ try:
 except ImportError:
     fcntl = None
 
-__all__ = [ 'Mailbox', 'Maildir', 'mbox', 'MH', 'Babyl', 'MMDF',
-            'Message', 'MaildirMessage', 'mboxMessage', 'MHMessage',
-            'BabylMessage', 'MMDFMessage']
+__all__ = ['Mailbox', 'Maildir', 'mbox', 'MH', 'Babyl', 'MMDF',
+           'Message', 'MaildirMessage', 'mboxMessage', 'MHMessage',
+           'BabylMessage', 'MMDFMessage', 'Error', 'NoSuchMailboxError',
+           'NotEmptyError', 'ExternalClashError', 'FormatError']
 
 linesep = os.linesep.encode('ascii')
 
@@ -1821,7 +1822,7 @@ class BabylMessage(Message):
     _type_specific_attributes = ['_labels', '_visible']
 
     def __init__(self, message=None):
-        """Initialize an BabylMessage instance."""
+        """Initialize a BabylMessage instance."""
         self._labels = []
         self._visible = Message()
         Message.__init__(self, message)

@@ -581,7 +581,7 @@ class TestParser(TestParserMixin, TestEmailBase):
 
     def test_get_comment_quoted_parens(self):
         self._test_get_x(parser.get_comment,
-            '(foo\) \(\)bar)', '(foo\) \(\)bar)', ' ', [], '', ['foo) ()bar'])
+            r'(foo\) \(\)bar)', r'(foo\) \(\)bar)', ' ', [], '', ['foo) ()bar'])
 
     def test_get_comment_non_printable(self):
         self._test_get_x(parser.get_comment,
@@ -625,7 +625,7 @@ class TestParser(TestParserMixin, TestEmailBase):
 
     def test_get_comment_qs_in_nested_comment(self):
         comment = self._test_get_x(parser.get_comment,
-            '(foo (b\)))', '(foo (b\)))', ' ', [], '', ['foo (b\))'])
+            r'(foo (b\)))', r'(foo (b\)))', ' ', [], '', [r'foo (b\))'])
         self.assertEqual(comment[2].content, 'b)')
 
     # get_cfws
@@ -2498,7 +2498,7 @@ class Test_parse_mime_parameters(TestParserMixin, TestEmailBase):
         # Note that it is undefined what we should do for error recovery when
         # there are duplicate parameter names or duplicate parts in a split
         # part.  We choose to ignore all duplicate parameters after the first
-        # and to take duplicate or missing rfc 2231 parts in apperance order.
+        # and to take duplicate or missing rfc 2231 parts in appearance order.
         # This is backward compatible with get_param's behavior, but the
         # decisions are arbitrary.
 

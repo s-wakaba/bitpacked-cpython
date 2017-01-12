@@ -4,12 +4,9 @@
     <_ProjectFileVersion>10.0.30319.1</_ProjectFileVersion>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
     <OutDir>$(BuildPath)</OutDir>
-    <OutDir Condition="'$(Py_OutDir)' != ''">$(Py_OutDir)</OutDir>
     <OutDir Condition="!HasTrailingSlash($(OutDir))">$(OutDir)\</OutDir>
-    <Py_IntDir Condition="'$(Py_IntDir)' == ''">$(SolutionDir)obj\</Py_IntDir>
-    <IntDir Condition="!HasTrailingSlash($(IntDir))">$(IntDir)\</IntDir>
+    <Py_IntDir Condition="'$(Py_IntDir)' == ''">$(MSBuildThisFileDirectory)obj\</Py_IntDir>
     <IntDir>$(Py_IntDir)\$(ArchName)_$(Configuration)\$(ProjectName)\</IntDir>
-    <IntDir Condition="$(Configuration) == 'PGInstrument' or $(Configuration) == 'PGUpdate'">$(Py_IntDir)\$(ArchName)_PGO\$(ProjectName)\</IntDir>
     <TargetName Condition="'$(TargetName)' == ''">$(ProjectName)</TargetName>
     <TargetName>$(TargetName)$(PyDebugExt)</TargetName>
     <GenerateManifest>false</GenerateManifest>
@@ -29,7 +26,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(PySourcePath)Include;$(PySourcePath)PC;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PySourcePath)Include;$(PySourcePath)PC;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;$(_PlatformPreprocessorDefinition)$(_DebugPreprocessorDefinition)$(_PydPreprocessorDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       
       <Optimization>MaxSpeed</Optimization>
@@ -49,6 +46,9 @@
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <ClCompile Condition="$(ICCBuild) == 'true'">
+      <FloatingPointModel>Strict</FloatingPointModel>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -72,7 +72,7 @@
       <LinkTimeCodeGeneration Condition="$(SupportPGO) and $(Configuration) == 'PGUpdate'">true</LinkTimeCodeGeneration>
     </Lib>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>$(PySourcePath)PC;$(PySourcePath)Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(PySourcePath)PC;$(PySourcePath)Include;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>$(_DebugPreprocessorDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Culture>0x0409</Culture>
     </ResourceCompile>
@@ -82,24 +82,24 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <TargetEnvironment>Win32</TargetEnvironment>
       <TargetEnvironment Condition="'$(Platform)' == 'x64'">X64</TargetEnvironment>
-      <TypeLibraryName>$(OutDir)wininst.tlb</TypeLibraryName>
-      <HeaderFileName>
-      </HeaderFileName>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <InterfaceIdentifierFileName>$(MSBuildProjectName)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>$(MSBuildProjectName)_p.c</ProxyFileName>
     </Midl>
   </ItemDefinitionGroup>
 
   <Target Name="GeneratePythonNtRcH"
-          BeforeTargets="$(MakeVersionInfoBeforeTarget)"
+          BeforeTargets="ClCompile"
           Inputs="$(PySourcePath)Include\patchlevel.h"
-          Outputs="$(PySourcePath)PC\pythonnt_rc$(PyDebugExt).h">
-    <WriteLinesToFile File="$(PySourcePath)PC\pythonnt_rc$(PyDebugExt).h" Overwrite="true" Encoding="ascii"
-                      Lines='/* This file created by python.props /t:GeneratePythonNtRcH */
+          Outputs="$(IntDir)pythonnt_rc.h">
+    <WriteLinesToFile File="$(IntDir)pythonnt_rc.h" Overwrite="true" Encoding="ascii"
+                      Lines='/* This file created by pyproject.props /t:GeneratePythonNtRcH */
 #define FIELD3 $(Field3Value)
 #define MS_DLL_ID "$(SysWinVer)"
-#define PYTHON_DLL_NAME "$(PyDllName).dll"
+#define PYTHON_DLL_NAME "$(TargetName)$(TargetExt)"
 ' />
     <ItemGroup>
-        <FileWrites Include="$(PySourcePath)PC\pythonnt_rc$(PyDebugExt).h" />
+        <FileWrites Include="$(IntDir)pythonnt_rc.h" />
     </ItemGroup>
   </Target>
 
@@ -147,11 +147,13 @@ foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcesses
              Targets="CleanAll" />
   </Target>
 
-  <PropertyGroup Condition="'$(SigningCertificate)' != '' and $(SupportSigning)">
-    <SignToolPath Condition="'$(SignToolPath)' == '' or !Exists($(SignToolPath))">$(registry:HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Kits\Installed Roots@KitsRoot81)\bin\x86\signtool.exe</SignToolPath>
-    <SignToolPath Condition="!Exists($(SignToolPath))">$(registry:HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Kits\Installed Roots@KitsRoot)\bin\x86\signtool.exe</SignToolPath>
-    <SignToolPath Condition="!Exists($(SignToolPath))">$(registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A@InstallationFolder)\Bin\signtool.exe</SignToolPath>
-    <_SignCommand Condition="Exists($(SignToolPath))">"$(SignToolPath)" sign /q /n "$(SigningCertificate)" /t http://timestamp.verisign.com/scripts/timestamp.dll /d "Python $(PythonVersion)"</_SignCommand>
+  <PropertyGroup>
+    <SdkBinPath Condition="'$(SdkBinPath)' == '' or !Exists($(SdkBinPath))">$(registry:HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Kits\Installed Roots@KitsRoot10)\bin\x86</SdkBinPath>
+    <SdkBinPath Condition="!Exists($(SdkBinPath))">$(registry:HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Kits\Installed Roots@KitsRoot81)\bin\x86</SdkBinPath>
+    <SdkBinPath Condition="!Exists($(SdkBinPath))">$(registry:HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Kits\Installed Roots@KitsRoot)\bin\x86</SdkBinPath>
+    <SdkBinPath Condition="!Exists($(SdkBinPath))">$(registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.1A@InstallationFolder)\Bin\</SdkBinPath>
+    <_SignCommand Condition="Exists($(SdkBinPath)) and '$(SigningCertificate)' != '' and $(SupportSigning)">"$(SdkBinPath)\signtool.exe" sign /q /n "$(SigningCertificate)" /fd sha256 /t http://timestamp.verisign.com/scripts/timestamp.dll /d "Python $(PythonVersion)"</_SignCommand>
+    <_MakeCatCommand Condition="Exists($(SdkBinPath))">"$(SdkBinPath)\makecat.exe"</_MakeCatCommand>
   </PropertyGroup>
   
   <Target Name="_SignBuild" AfterTargets="AfterBuild" Condition="'$(SigningCertificate)' != '' and $(SupportSigning)">

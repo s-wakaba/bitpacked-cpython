@@ -3,10 +3,15 @@
 
 .. module:: unittest
    :synopsis: Unit testing framework for Python.
+
 .. moduleauthor:: Steve Purcell <stephen_purcell@yahoo.com>
 .. sectionauthor:: Steve Purcell <stephen_purcell@yahoo.com>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. sectionauthor:: Raymond Hettinger <python@rcn.com>
+
+**Source code:** :source:`Lib/unittest/__init__.py`
+
+--------------
 
 (If you are already familiar with the basic concepts of testing, you might want
 to skip to :ref:`the list of assert methods <assert-methods>`.)
@@ -67,7 +72,7 @@ test runner
    a GUI tool for test discovery and execution.  This is intended largely for ease of use
    for those new to unit testing.  For production environments it is
    recommended that tests be driven by a continuous integration system such as
-   `Buildbot <http://buildbot.net/>`_, `Jenkins <http://jenkins-ci.org/>`_
+   `Buildbot <https://buildbot.net/>`_, `Jenkins <https://jenkins.io/>`_
    or  `Hudson <http://hudson-ci.org/>`_.
 
 
@@ -86,19 +91,19 @@ Here is a short script to test three string methods::
 
   class TestStringMethods(unittest.TestCase):
 
-    def test_upper(self):
-        self.assertEqual('foo'.upper(), 'FOO')
+      def test_upper(self):
+          self.assertEqual('foo'.upper(), 'FOO')
 
-    def test_isupper(self):
-        self.assertTrue('FOO'.isupper())
-        self.assertFalse('Foo'.isupper())
+      def test_isupper(self):
+          self.assertTrue('FOO'.isupper())
+          self.assertFalse('Foo'.isupper())
 
-    def test_split(self):
-        s = 'hello world'
-        self.assertEqual(s.split(), ['hello', 'world'])
-        # check that s.split fails when the separator is not a string
-        with self.assertRaises(TypeError):
-            s.split(2)
+      def test_split(self):
+          s = 'hello world'
+          self.assertEqual(s.split(), ['hello', 'world'])
+          # check that s.split fails when the separator is not a string
+          with self.assertRaises(TypeError):
+              s.split(2)
 
   if __name__ == '__main__':
       unittest.main()
@@ -118,7 +123,7 @@ and produce a report.
 
 The :meth:`~TestCase.setUp` and :meth:`~TestCase.tearDown` methods allow you
 to define instructions that will be executed before and after each test method.
-They are covered in more details in the section :ref:`organizing-tests`.
+They are covered in more detail in the section :ref:`organizing-tests`.
 
 The final block shows a simple way to run the tests. :func:`unittest.main`
 provides a command-line interface to the test script.  When run from the command
@@ -347,7 +352,7 @@ call for every single test we run::
 
    import unittest
 
-   class SimpleWidgetTestCase(unittest.TestCase):
+   class WidgetTestCase(unittest.TestCase):
        def setUp(self):
            self.widget = Widget('The widget')
 
@@ -374,7 +379,7 @@ after the test method has been run::
 
    import unittest
 
-   class SimpleWidgetTestCase(unittest.TestCase):
+   class WidgetTestCase(unittest.TestCase):
        def setUp(self):
            self.widget = Widget('The widget')
 
@@ -680,10 +685,12 @@ Test cases
       Method called immediately after the test method has been called and the
       result recorded.  This is called even if the test method raised an
       exception, so the implementation in subclasses may need to be particularly
-      careful about checking internal state.  Any exception, other than :exc:`AssertionError`
-      or :exc:`SkipTest`, raised by this method will be considered an error rather than a
-      test failure.  This method will only be called if the :meth:`setUp` succeeds,
-      regardless of the outcome of the test method. The default implementation does nothing.
+      careful about checking internal state.  Any exception, other than
+      :exc:`AssertionError` or :exc:`SkipTest`, raised by this method will be
+      considered an additional error rather than a test failure (thus increasing
+      the total number of reported errors). This method will only be called if
+      the :meth:`setUp` succeeds, regardless of the outcome of the test method.
+      The default implementation does nothing.
 
 
    .. method:: setUpClass()
@@ -762,8 +769,9 @@ Test cases
 
    .. _assert-methods:
 
-   The :class:`TestCase` class provides a number of methods to check for and
-   report failures, such as:
+   The :class:`TestCase` class provides several assert methods to check for and
+   report failures.  The following table lists the most commonly used methods
+   (see the tables below for more assert methods):
 
    +-----------------------------------------+-----------------------------+---------------+
    | Method                                  | Checks that                 | New in        |
@@ -860,7 +868,7 @@ Test cases
    .. method:: assertIsNone(expr, msg=None)
                assertIsNotNone(expr, msg=None)
 
-      Test that *expr* is (or is not) None.
+      Test that *expr* is (or is not) ``None``.
 
       .. versionadded:: 3.1
 
@@ -884,7 +892,7 @@ Test cases
 
 
 
-   It is also possible to check the production of exceptions, warnings and
+   It is also possible to check the production of exceptions, warnings, and
    log messages using the following methods:
 
    +---------------------------------------------------------+--------------------------------------+------------+
@@ -1308,19 +1316,17 @@ Test cases
 
    .. attribute:: longMessage
 
-      If set to ``True`` then any explicit failure message you pass in to the
-      :ref:`assert methods <assert-methods>` will be appended to the end of the
-      normal failure message.  The normal messages contain useful information
-      about the objects involved, for example the message from assertEqual
-      shows you the repr of the two unequal objects. Setting this attribute
-      to ``True`` allows you to have a custom error message in addition to the
-      normal one.
+      This class attribute determines what happens when a custom failure message
+      is passed as the msg argument to an assertXYY call that fails.
+      ``True`` is the default value. In this case, the custom message is appended
+      to the end of the standard failure message.
+      When set to ``False``, the custom message replaces the standard message.
 
-      This attribute defaults to ``True``. If set to False then a custom message
-      passed to an assert method will silence the normal message.
+      The class setting can be overridden in individual test methods by assigning
+      an instance attribute, self.longMessage, to ``True`` or ``False`` before
+      calling the assert methods.
 
-      The class setting can be overridden in individual tests by assigning an
-      instance attribute to ``True`` or ``False`` before calling the assert methods.
+      The class setting gets reset before each test call.
 
       .. versionadded:: 3.1
 
@@ -1334,7 +1340,7 @@ Test cases
       methods that delegate to it), :meth:`assertDictEqual` and
       :meth:`assertMultiLineEqual`.
 
-      Setting ``maxDiff`` to None means that there is no maximum length of
+      Setting ``maxDiff`` to ``None`` means that there is no maximum length of
       diffs.
 
       .. versionadded:: 3.2
@@ -1385,9 +1391,9 @@ Test cases
 
       Add a function to be called after :meth:`tearDown` to cleanup resources
       used during the test. Functions will be called in reverse order to the
-      order they are added (LIFO). They are called with any arguments and
-      keyword arguments passed into :meth:`addCleanup` when they are
-      added.
+      order they are added (:abbr:`LIFO (last-in, first-out)`).  They
+      are called with any arguments and keyword arguments passed into
+      :meth:`addCleanup` when they are added.
 
       If :meth:`setUp` fails, meaning that :meth:`tearDown` is not called,
       then any cleanup functions added will still be called.
@@ -1966,7 +1972,8 @@ Loading and running tests
    methods <deprecated-aliases>` are also special-cased and, when the warning
    filters are ``'default'`` or ``'always'``, they will appear only once
    per-module, in order to avoid too many warning messages.  This behavior can
-   be overridden using the :option:`-Wd` or :option:`-Wa` options and leaving
+   be overridden using Python's :option:`!-Wd` or :option:`!-Wa` options
+   (see :ref:`Warning control <using-on-warnings>`) and leaving
    *warnings* to ``None``.
 
    .. versionchanged:: 3.2
@@ -2045,9 +2052,10 @@ Loading and running tests
    The *failfast*, *catchbreak* and *buffer* parameters have the same
    effect as the same-name `command-line options`_.
 
-   The *warning* argument specifies the :ref:`warning filter <warning-filter>`
+   The *warnings* argument specifies the :ref:`warning filter <warning-filter>`
    that should be used while running the tests.  If it's not specified, it will
-   remain ``None`` if a :option:`-W` option is passed to :program:`python`,
+   remain ``None`` if a :option:`!-W` option is passed to :program:`python`
+   (see :ref:`Warning control <using-on-warnings>`),
    otherwise it will be set to ``'default'``.
 
    Calling ``main`` actually returns an instance of the ``TestProgram`` class.

@@ -1,7 +1,7 @@
 # Test the module type
 import unittest
 import weakref
-from test.support import gc_collect
+from test.support import gc_collect, requires_type_collecting
 from test.support.script_helper import assert_python_ok
 
 import sys
@@ -30,7 +30,7 @@ class ModuleTests(unittest.TestCase):
             pass
         self.assertEqual(foo.__doc__, ModuleType.__doc__)
 
-    def test_unintialized_missing_getattr(self):
+    def test_uninitialized_missing_getattr(self):
         # Issue 8297
         # test the text in the AttributeError of an uninitialized module
         foo = ModuleType.__new__(ModuleType)
@@ -101,6 +101,7 @@ class ModuleTests(unittest.TestCase):
         gc_collect()
         self.assertEqual(f().__dict__["bar"], 4)
 
+    @requires_type_collecting
     def test_clear_dict_in_ref_cycle(self):
         destroyed = []
         m = ModuleType("foo")
@@ -214,6 +215,7 @@ a = A(destroyed)"""
         self.assertEqual(r[-len(ends_with):], ends_with,
                          '{!r} does not end with {!r}'.format(r, ends_with))
 
+    @requires_type_collecting
     def test_module_finalization_at_shutdown(self):
         # Module globals and builtins should still be available during shutdown
         rc, out, err = assert_python_ok("-c", "from test import final_a")
@@ -227,7 +229,7 @@ a = A(destroyed)"""
             b"len = len",
             b"shutil.rmtree = rmtree"})
 
-    def test_descriptor_errors_propogate(self):
+    def test_descriptor_errors_propagate(self):
         class Descr:
             def __get__(self, o, t):
                 raise RuntimeError

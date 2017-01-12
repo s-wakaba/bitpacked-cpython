@@ -111,12 +111,13 @@ type objects) *must* have the :attr:`ob_size` field.
    For statically allocated type objects, the tp_name field should contain a dot.
    Everything before the last dot is made accessible as the :attr:`__module__`
    attribute, and everything after the last dot is made accessible as the
-   :attr:`__name__` attribute.
+   :attr:`~definition.__name__` attribute.
 
    If no dot is present, the entire :c:member:`~PyTypeObject.tp_name` field is made accessible as the
-   :attr:`__name__` attribute, and the :attr:`__module__` attribute is undefined
+   :attr:`~definition.__name__` attribute, and the :attr:`__module__` attribute is undefined
    (unless explicitly set in the dictionary, as explained above).  This means your
-   type will be impossible to pickle.
+   type will be impossible to pickle.  Additionally, it will not be listed in
+   module documentations created with pydoc.
 
    This field is not inherited by subtypes.
 
@@ -208,12 +209,13 @@ type objects) *must* have the :attr:`ob_size` field.
 
 .. c:member:: setattrfunc PyTypeObject.tp_setattr
 
-   An optional pointer to the set-attribute-string function.
+   An optional pointer to the function for setting and deleting attributes.
 
    This field is deprecated.  When it is defined, it should point to a function
    that acts the same as the :c:member:`~PyTypeObject.tp_setattro` function, but taking a C string
    instead of a Python string object to give the attribute name.  The signature is
-   the same as for :c:func:`PyObject_SetAttrString`.
+   the same as for :c:func:`PyObject_SetAttrString`, but setting
+   *v* to *NULL* to delete an attribute must be supported.
 
    This field is inherited by subtypes together with :c:member:`~PyTypeObject.tp_setattro`: a subtype
    inherits both :c:member:`~PyTypeObject.tp_setattr` and :c:member:`~PyTypeObject.tp_setattro` from its base type when
@@ -351,9 +353,10 @@ type objects) *must* have the :attr:`ob_size` field.
 
 .. c:member:: setattrofunc PyTypeObject.tp_setattro
 
-   An optional pointer to the set-attribute function.
+   An optional pointer to the function for setting and deleting attributes.
 
-   The signature is the same as for :c:func:`PyObject_SetAttr`.  It is usually
+   The signature is the same as for :c:func:`PyObject_SetAttr`, but setting
+   *v* to *NULL* to delete an attribute must be supported.  It is usually
    convenient to set this field to :c:func:`PyObject_GenericSetAttr`, which
    implements the normal way of setting object attributes.
 
@@ -724,7 +727,7 @@ type objects) *must* have the :attr:`ob_size` field.
       typedef struct PyGetSetDef {
           char *name;    /* attribute name */
           getter get;    /* C function to get the attribute */
-          setter set;    /* C function to set the attribute */
+          setter set;    /* C function to set or delete the attribute */
           char *doc;     /* optional doc string */
           void *closure; /* optional additional data for getter and setter */
       } PyGetSetDef;
@@ -775,12 +778,14 @@ type objects) *must* have the :attr:`ob_size` field.
 
 .. c:member:: descrsetfunc PyTypeObject.tp_descr_set
 
-   An optional pointer to a "descriptor set" function.
+   An optional pointer to a function for setting and deleting
+   a descriptor's value.
 
    The function signature is ::
 
       int tp_descr_set(PyObject *self, PyObject *obj, PyObject *value);
 
+   The *value* argument is set to *NULL* to delete the value.
    This field is inherited by subtypes.
 
    .. XXX explain.
@@ -1171,9 +1176,11 @@ Mapping Object Structures
 
 .. c:member:: objobjargproc PyMappingMethods.mp_ass_subscript
 
-   This function is used by :c:func:`PyObject_SetItem` and has the same
-   signature.  If this slot is *NULL*, the object does not support item
-   assignment.
+   This function is used by :c:func:`PyObject_SetItem` and
+   :c:func:`PyObject_DelItem`.  It has the same signature as
+   :c:func:`PyObject_SetItem`, but *v* can also be set to *NULL* to delete
+   an item.  If this slot is *NULL*, the object does not support item
+   assignment and deletion.
 
 
 .. _sequence-structs:
@@ -1222,7 +1229,7 @@ Sequence Object Structures
 
    This function is used by :c:func:`PySequence_SetItem` and has the same
    signature.  This slot may be left to *NULL* if the object does not support
-   item assignment.
+   item assignment and deletion.
 
 .. c:member:: objobjproc PySequenceMethods.sq_contains
 
@@ -1271,7 +1278,7 @@ Buffer Object Structures
    steps:
 
    (1) Check if the request can be met. If not, raise :c:data:`PyExc_BufferError`,
-       set :c:data:`view->obj` to *NULL* and return -1.
+       set :c:data:`view->obj` to *NULL* and return ``-1``.
 
    (2) Fill in the requested fields.
 
@@ -1279,7 +1286,7 @@ Buffer Object Structures
 
    (4) Set :c:data:`view->obj` to *exporter* and increment :c:data:`view->obj`.
 
-   (5) Return 0.
+   (5) Return ``0``.
 
    If *exporter* is part of a chain or tree of buffer providers, two main
    schemes can be used:
@@ -1322,7 +1329,7 @@ Buffer Object Structures
 
    (1) Decrement an internal counter for the number of exports.
 
-   (2) If the counter is 0, free all memory associated with *view*.
+   (2) If the counter is ``0``, free all memory associated with *view*.
 
    The exporter MUST use the :c:member:`~Py_buffer.internal` field to keep
    track of buffer-specific resources. This field is guaranteed to remain

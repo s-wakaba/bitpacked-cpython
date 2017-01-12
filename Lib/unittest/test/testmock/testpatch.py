@@ -10,9 +10,9 @@ from unittest.test.testmock import support
 from unittest.test.testmock.support import SomeClass, is_instance
 
 from unittest.mock import (
-    NonCallableMock, CallableMixin, patch, sentinel,
+    NonCallableMock, CallableMixin, sentinel,
     MagicMock, Mock, NonCallableMagicMock, patch, _patch,
-    DEFAULT, call, _get_target, _patch
+    DEFAULT, call, _get_target
 )
 
 
@@ -969,8 +969,14 @@ class PatchTest(unittest.TestCase):
     def test_autospec_function(self):
         @patch('%s.function' % __name__, autospec=True)
         def test(mock):
+            function.assert_not_called()
+            self.assertRaises(AssertionError, function.assert_called)
+            self.assertRaises(AssertionError, function.assert_called_once)
             function(1)
+            self.assertRaises(AssertionError, function.assert_not_called)
             function.assert_called_with(1)
+            function.assert_called()
+            function.assert_called_once()
             function(2, 3)
             function.assert_called_with(2, 3)
 
@@ -1816,6 +1822,32 @@ class PatchTest(unittest.TestCase):
 
         self.assertEqual(stopped, ["three", "two", "one"])
 
+
+    def test_special_attrs(self):
+        def foo(x=0):
+            """TEST"""
+            return x
+        with patch.object(foo, '__defaults__', (1, )):
+            self.assertEqual(foo(), 1)
+        self.assertEqual(foo(), 0)
+
+        with patch.object(foo, '__doc__', "FUN"):
+            self.assertEqual(foo.__doc__, "FUN")
+        self.assertEqual(foo.__doc__, "TEST")
+
+        with patch.object(foo, '__module__', "testpatch2"):
+            self.assertEqual(foo.__module__, "testpatch2")
+        self.assertEqual(foo.__module__, 'unittest.test.testmock.testpatch')
+
+        with patch.object(foo, '__annotations__', dict([('s', 1, )])):
+            self.assertEqual(foo.__annotations__, dict([('s', 1, )]))
+        self.assertEqual(foo.__annotations__, dict())
+
+        def foo(*a, x=0):
+            return x
+        with patch.object(foo, '__kwdefaults__', dict([('x', 1, )])):
+            self.assertEqual(foo(), 1)
+        self.assertEqual(foo(), 0)
 
 if __name__ == '__main__':
     unittest.main()

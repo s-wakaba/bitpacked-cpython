@@ -4,7 +4,7 @@ import test.support
 test.support.import_module('_multiprocessing')
 # Skip tests if sem_open implementation is broken.
 test.support.import_module('multiprocessing.synchronize')
-# import threading after _multiprocessing to raise a more revelant error
+# import threading after _multiprocessing to raise a more relevant error
 # message: "No module named _multiprocessing". _multiprocessing is not compiled
 # without thread support.
 test.support.import_module('threading')
@@ -152,6 +152,30 @@ class ThreadPoolShutdownTest(ThreadPoolMixin, ExecutorShutdownTest, unittest.Tes
         del executor
 
         for t in threads:
+            t.join()
+
+    def test_thread_names_assigned(self):
+        executor = futures.ThreadPoolExecutor(
+            max_workers=5, thread_name_prefix='SpecialPool')
+        executor.map(abs, range(-5, 5))
+        threads = executor._threads
+        del executor
+
+        for t in threads:
+            self.assertRegex(t.name, r'^SpecialPool_[0-4]$')
+            t.join()
+
+    def test_thread_names_default(self):
+        executor = futures.ThreadPoolExecutor(max_workers=5)
+        executor.map(abs, range(-5, 5))
+        threads = executor._threads
+        del executor
+
+        for t in threads:
+            # We don't particularly care what the default name is, just that
+            # it has a default name implying that it is a ThreadPoolExecutor
+            # followed by what looks like a thread number.
+            self.assertRegex(t.name, r'^.*ThreadPoolExecutor.*_[0-4]$')
             t.join()
 
 
@@ -676,7 +700,7 @@ class FutureTests(unittest.TestCase):
         self.assertEqual(SUCCESSFUL_FUTURE.result(timeout=0), 42)
 
     def test_result_with_success(self):
-        # TODO(brian@sweetapp.com): This test is timing dependant.
+        # TODO(brian@sweetapp.com): This test is timing dependent.
         def notification():
             # Wait until the main thread is waiting for the result.
             time.sleep(1)
@@ -689,7 +713,7 @@ class FutureTests(unittest.TestCase):
         self.assertEqual(f1.result(timeout=5), 42)
 
     def test_result_with_cancel(self):
-        # TODO(brian@sweetapp.com): This test is timing dependant.
+        # TODO(brian@sweetapp.com): This test is timing dependent.
         def notification():
             # Wait until the main thread is waiting for the result.
             time.sleep(1)

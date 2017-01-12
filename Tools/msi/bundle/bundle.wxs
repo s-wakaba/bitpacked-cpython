@@ -1,14 +1,16 @@
 ﻿<?xml version="1.0"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:bal="http://schemas.microsoft.com/wix/BalExtension">
+     xmlns:bal="http://schemas.microsoft.com/wix/BalExtension"
+     xmlns:dep="http://schemas.microsoft.com/wix/DependencyExtension">
   <Bundle Name="!(loc.FullProductName)"
           UpgradeCode="$(var.CoreUpgradeCode)"
           Version="$(var.Version)"
-          IconSourceFile="bundle.ico"
+          IconSourceFile="..\..\..\PC\icons\setup.ico"
           Manufacturer="!(loc.Manufacturer)"
           AboutUrl="http://www.python.org/"
           DisableModify="button"
-          Compressed="no">
+          Compressed="no"
+          dep:ProviderKey="CPython-$(var.MajorVersionNumber).$(var.MinorVersionNumber)$(var.PyArchExt)$(var.PyTestExt)">
     <BootstrapperApplication Id="PythonBA" SourceFile="$(var.BootstrapApp)">
         <Payload Compressed='yes' SourceFile='Default.thm' />
         <Payload Compressed='yes' SourceFile='Default.wxl' />
@@ -51,7 +53,7 @@
     -->
     <Variable Name="DefaultCustomTargetDir" Value="" bal:Overridable="yes" />
 
-    <Variable Name="InstallAllUsersState" Value="enabled" />
+    <Variable Name="InstallAllUsersState" Value="enabled" bal:Overridable="yes" />
     <?if "$(var.PyTestExt)"="" ?>
     <Variable Name="InstallLauncherAllUsersState" Value="enabled" bal:Overridable="yes" />
     <?else ?>
@@ -72,6 +74,7 @@
     <Variable Name="Include_pip" Value="1" bal:Overridable="yes" />
     <?if "$(var.PyTestExt)"="" ?>
     <Variable Name="Include_launcher" Value="1" bal:Overridable="yes" />
+    <Variable Name="Include_launcherState" Value="enabled" bal:Overridable="yes" />
     <?else ?>
     <Variable Name="Include_launcher" Value="0" />
     <Variable Name="Include_launcherState" Value="disable" />
@@ -81,6 +84,7 @@
     
     <Variable Name="LauncherOnly" Value="0" bal:Overridable="yes" />
     <Variable Name="DetectedLauncher" Value="0" />
+    <Variable Name="DetectedOldLauncher" Value="0" />
     
     <Variable Name="AssociateFiles" Value="1" bal:Overridable="yes" />
     <Variable Name="Shortcuts" Value="1" bal:Overridable="yes" />

@@ -4,12 +4,11 @@
 .. module:: quopri
    :synopsis: Encode and decode files using the MIME quoted-printable encoding.
 
+**Source code:** :source:`Lib/quopri.py`
 
 .. index::
    pair: quoted-printable; encoding
    single: MIME; quoted-printable encoding
-
-**Source code:** :source:`Lib/quopri.py`
 
 --------------
 
@@ -53,7 +52,7 @@ sending a graphics file.
 
    Like :func:`encode`, except that it accepts a source :class:`bytes` and
    returns the corresponding encoded :class:`bytes`. By default, it sends a
-   False value to *quotetabs* parameter of the :func:`encode` function.
+   ``False`` value to *quotetabs* parameter of the :func:`encode` function.
 
 
 

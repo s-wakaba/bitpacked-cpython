@@ -5,7 +5,7 @@
 import sys
 from types import FunctionType, MethodType, BuiltinFunctionType
 import pyclbr
-from unittest import TestCase
+from unittest import TestCase, main as unittest_main
 
 StaticMethodType = type(staticmethod(lambda: None))
 ClassMethodType = type(classmethod(lambda c: None))
@@ -156,9 +156,9 @@ class PyclbrTest(TestCase):
         # These were once about the 10 longest modules
         cm('random', ignore=('Random',))  # from _random import Random as CoreGenerator
         cm('cgi', ignore=('log',))      # set with = in module
-        cm('pickle')
+        cm('pickle', ignore=('partial',))
         cm('aifc', ignore=('openfp', '_aifc_params'))  # set with = in module
-        cm('sre_parse', ignore=('dump', 'groups')) # from sre_constants import *; property
+        cm('sre_parse', ignore=('dump', 'groups', 'pos')) # from sre_constants import *; property
         cm('pdb')
         cm('pydoc')
 
@@ -173,4 +173,4 @@ class PyclbrTest(TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest_main()

@@ -4,6 +4,10 @@
 .. module:: copy
    :synopsis: Shallow and deep copy operations.
 
+**Source code:** :source:`Lib/copy.py`
+
+--------------
+
 Assignment statements in Python do not copy objects, they create bindings
 between a target and an object. For collections that are mutable or contain
 mutable items, a copy is sometimes needed so one can change one copy without
@@ -44,7 +48,7 @@ copy operations:
   reference to themselves) may cause a recursive loop.
 
 * Because deep copy copies *everything* it may copy too much, e.g.,
-  administrative data structures that should be shared even between copies.
+  even administrative data structures that should be shared even between copies.
 
 The :func:`deepcopy` function avoids these problems by:
 

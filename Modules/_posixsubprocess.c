@@ -21,8 +21,7 @@
 #include <dirent.h>
 #endif
 
-#if defined(__ANDROID__) && !defined(SYS_getdents64)
-/* Android doesn't expose syscalls, add the definition manually. */
+#if defined(__ANDROID__) && __ANDROID_API__ < 21 && !defined(SYS_getdents64)
 # include <sys/linux-syscalls.h>
 # define SYS_getdents64  __NR_getdents64
 #endif
@@ -47,24 +46,32 @@
 #define POSIX_CALL(call)   do { if ((call) == -1) goto error; } while (0)
 
 
-/* Given the gc module call gc.enable() and return 0 on success. */
+/* If gc was disabled, call gc.enable().  Return 0 on success. */
 static int
-_enable_gc(PyObject *gc_module)
+_enable_gc(int need_to_reenable_gc, PyObject *gc_module)
 {
     PyObject *result;
     _Py_IDENTIFIER(enable);
+    PyObject *exctype, *val, *tb;
 
-    result = _PyObject_CallMethodId(gc_module, &PyId_enable, NULL);
-    if (result == NULL)
-        return 1;
-    Py_DECREF(result);
+    if (need_to_reenable_gc) {
+        PyErr_Fetch(&exctype, &val, &tb);
+        result = _PyObject_CallMethodId(gc_module, &PyId_enable, NULL);
+        if (exctype != NULL) {
+            PyErr_Restore(exctype, val, tb);
+        }
+        if (result == NULL) {
+            return 1;
+        }
+        Py_DECREF(result);
+    }
     return 0;
 }
 
 
 /* Convert ASCII to a positive int, no libc call. no overflow. -1 on error. */
 static int
-_pos_int_from_ascii(char *name)
+_pos_int_from_ascii(const char *name)
 {
     int num = 0;
     while (*name >= '0' && *name <= '9') {
@@ -514,7 +521,7 @@ error:
         char *cur;
         _Py_write_noraise(errpipe_write, "OSError:", 8);
         cur = hex_errno + sizeof(hex_errno);
-        while (saved_errno != 0 && cur > hex_errno) {
+        while (saved_errno != 0 && cur != hex_errno) {
             *--cur = Py_hexdigits[saved_errno % 16];
             saved_errno /= 16;
         }
@@ -698,6 +705,7 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
         && _PyImport_ReleaseLock() < 0 && !PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError,
                         "not holding the import lock");
+        pid = -1;
     }
     import_lock_held = 0;
 #endif
@@ -710,9 +718,8 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
     _Py_FreeCharPArray(exec_array);
 
     /* Reenable gc in the parent process (or if fork failed). */
-    if (need_to_reenable_gc && _enable_gc(gc_module)) {
-        Py_XDECREF(gc_module);
-        return NULL;
+    if (_enable_gc(need_to_reenable_gc, gc_module)) {
+        pid = -1;
     }
     Py_XDECREF(preexec_fn_args_tuple);
     Py_XDECREF(gc_module);
@@ -736,14 +743,7 @@ cleanup:
     Py_XDECREF(converted_args);
     Py_XDECREF(fast_args);
     Py_XDECREF(preexec_fn_args_tuple);
-
-    /* Reenable gc if it was disabled. */
-    if (need_to_reenable_gc) {
-        PyObject *exctype, *val, *tb;
-        PyErr_Fetch(&exctype, &val, &tb);
-        _enable_gc(gc_module);
-        PyErr_Restore(exctype, val, tb);
-    }
+    _enable_gc(need_to_reenable_gc, gc_module);
     Py_XDECREF(gc_module);
     return NULL;
 }

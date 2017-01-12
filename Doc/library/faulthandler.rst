@@ -6,6 +6,8 @@
 
 .. versionadded:: 3.3
 
+----------------
+
 This module contains functions to dump Python tracebacks explicitly, on a fault,
 after a timeout, or on a user signal. Call :func:`faulthandler.enable` to
 install fault handlers for the :const:`SIGSEGV`, :const:`SIGFPE`,
@@ -67,6 +69,9 @@ Fault handler state
 
    .. versionchanged:: 3.5
       Added support for passing file descriptor to this function.
+
+   .. versionchanged:: 3.6
+      On Windows, a handler for Windows exception is also installed.
 
 .. function:: disable()
 

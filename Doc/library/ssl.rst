@@ -7,12 +7,11 @@
 .. moduleauthor:: Bill Janssen <bill.janssen@gmail.com>
 .. sectionauthor::  Bill Janssen <bill.janssen@gmail.com>
 
+**Source code:** :source:`Lib/ssl.py`
 
 .. index:: single: OpenSSL; (use in module ssl)
 
 .. index:: TLS, SSL, Transport Layer Security, Secure Sockets Layer
-
-**Source code:** :source:`Lib/ssl.py`
 
 --------------
 
@@ -49,6 +48,12 @@ retrieves the cipher being used for the secure connection.
 For more sophisticated applications, the :class:`ssl.SSLContext` class
 helps manage settings and certificates, which can then be inherited
 by SSL sockets created through the :meth:`SSLContext.wrap_socket` method.
+
+.. versionchanged:: 3.6
+
+   OpenSSL 0.9.8, 1.0.0 and 1.0.1 are deprecated and no longer supported.
+   In the future the ssl module will require at least OpenSSL 1.0.2 or
+   1.1.0.
 
 
 Functions, Constants, and Exceptions
@@ -179,7 +184,7 @@ instead.
    use.  Typically, the server chooses a particular protocol version, and the
    client must adapt to the server's choice.  Most of the versions are not
    interoperable with the other versions.  If not specified, the default is
-   :data:`PROTOCOL_SSLv23`; it provides the most compatibility with other
+   :data:`PROTOCOL_TLS`; it provides the most compatibility with other
    versions.
 
    Here's a table showing which versions in a client (down the side) can connect
@@ -187,16 +192,20 @@ instead.
 
      .. table::
 
-       ========================  =========  =========  ==========  =========  ===========  ===========
-        *client* / **server**    **SSLv2**  **SSLv3**  **SSLv23**  **TLSv1**  **TLSv1.1**  **TLSv1.2**
-       ------------------------  ---------  ---------  ----------  ---------  -----------  -----------
-        *SSLv2*                    yes        no         yes         no         no         no
-        *SSLv3*                    no         yes        yes         no         no         no
-        *SSLv23*                   no         yes        yes         yes        yes        yes
-        *TLSv1*                    no         no         yes         yes        no         no
-        *TLSv1.1*                  no         no         yes         no         yes        no
-        *TLSv1.2*                  no         no         yes         no         no         yes
-       ========================  =========  =========  ==========  =========  ===========  ===========
+       ========================  ============  ============  =============  =========  ===========  ===========
+        *client* / **server**    **SSLv2**     **SSLv3**     **TLS**        **TLSv1**  **TLSv1.1**  **TLSv1.2**
+       ------------------------  ------------  ------------  -------------  ---------  -----------  -----------
+        *SSLv2*                    yes           no            no [1]_        no         no         no
+        *SSLv3*                    no            yes           no [2]_        no         no         no
+        *TLS* (*SSLv23*)           no [1]_       no [2]_       yes            yes        yes        yes
+        *TLSv1*                    no            no            yes            yes        no         no
+        *TLSv1.1*                  no            no            yes            no         yes        no
+        *TLSv1.2*                  no            no            yes            no         no         yes
+       ========================  ============  ============  =============  =========  ===========  ===========
+
+   .. rubric:: Footnotes
+   .. [1] :class:`SSLContext` disables SSLv2 with :data:`OP_NO_SSLv2` by default.
+   .. [2] :class:`SSLContext` disables SSLv3 with :data:`OP_NO_SSLv3` by default.
 
    .. note::
 
@@ -206,7 +215,7 @@ instead.
 
    The *ciphers* parameter sets the available ciphers for this SSL object.
    It should be a string in the `OpenSSL cipher list format
-   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>`_.
+   <https://www.openssl.org/docs/apps/ciphers.html#CIPHER-LIST-FORMAT>`_.
 
    The parameter ``do_handshake_on_connect`` specifies whether to do the SSL
    handshake automatically after doing a :meth:`socket.connect`, or whether the
@@ -224,7 +233,6 @@ instead.
 
    .. versionchanged:: 3.2
       New optional argument *ciphers*.
-
 
 Context creation
 ^^^^^^^^^^^^^^^^
@@ -245,7 +253,7 @@ purposes.
    :const:`None`, this function can choose to trust the system's default
    CA certificates instead.
 
-   The settings are: :data:`PROTOCOL_SSLv23`, :data:`OP_NO_SSLv2`, and
+   The settings are: :data:`PROTOCOL_TLS`, :data:`OP_NO_SSLv2`, and
    :data:`OP_NO_SSLv3` with high encryption cipher suites without RC4 and
    without unauthenticated cipher suites. Passing :data:`~Purpose.SERVER_AUTH`
    as *purpose* sets :data:`~SSLContext.verify_mode` to :data:`CERT_REQUIRED`
@@ -280,6 +288,12 @@ purposes.
 
      RC4 was dropped from the default cipher string.
 
+   .. versionchanged:: 3.6
+
+     ChaCha20/Poly1305 was added to the default cipher string.
+
+     3DES was dropped from the default cipher string.
+
 
 Random generation
 ^^^^^^^^^^^^^^^^^
@@ -296,7 +310,7 @@ Random generation
 
    Read the Wikipedia article, `Cryptographically secure pseudorandom number
    generator (CSPRNG)
-   <http://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator>`_,
+   <https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator>`_,
    to get the requirements of a cryptographically generator.
 
    .. versionadded:: 3.3
@@ -317,6 +331,11 @@ Random generation
 
    .. versionadded:: 3.3
 
+   .. deprecated:: 3.6
+
+      OpenSSL has deprecated :func:`ssl.RAND_pseudo_bytes`, use
+      :func:`ssl.RAND_bytes` instead.
+
 .. function:: RAND_status()
 
    Return ``True`` if the SSL pseudo-random number generator has been seeded
@@ -335,7 +354,7 @@ Random generation
    See http://egd.sourceforge.net/ or http://prngd.sourceforge.net/ for sources
    of entropy-gathering daemons.
 
-   Availability: not available with LibreSSL.
+   Availability: not available with LibreSSL and OpenSSL > 1.1.0
 
 .. function:: RAND_add(bytes, entropy)
 
@@ -344,7 +363,7 @@ Random generation
    string (so you can always use :const:`0.0`).  See :rfc:`1750` for more
    information on sources of entropy.
 
-   .. versionchanged: 3.5
+   .. versionchanged:: 3.5
       Writable :term:`bytes-like object` is now accepted.
 
 Certificate handling
@@ -410,7 +429,7 @@ Certificate handling
       previously. Return an integer (no fractions of a second in the
       input format)
 
-.. function:: get_server_certificate(addr, ssl_version=PROTOCOL_SSLv23, ca_certs=None)
+.. function:: get_server_certificate(addr, ssl_version=PROTOCOL_TLS, ca_certs=None)
 
    Given the address ``addr`` of an SSL-protected server, as a (*hostname*,
    *port-number*) pair, fetches the server's certificate, and returns it as a
@@ -426,7 +445,7 @@ Certificate handling
 
    .. versionchanged:: 3.5
       The default *ssl_version* is changed from :data:`PROTOCOL_SSLv3` to
-      :data:`PROTOCOL_SSLv23` for maximum compatibility with modern servers.
+      :data:`PROTOCOL_TLS` for maximum compatibility with modern servers.
 
 .. function:: DER_cert_to_PEM_cert(DER_cert_bytes)
 
@@ -445,12 +464,15 @@ Certificate handling
    :meth:`SSLContext.set_default_verify_paths`. The return value is a
    :term:`named tuple` ``DefaultVerifyPaths``:
 
-   * :attr:`cafile` - resolved path to cafile or None if the file doesn't exist,
-   * :attr:`capath` - resolved path to capath or None if the directory doesn't exist,
+   * :attr:`cafile` - resolved path to cafile or ``None`` if the file doesn't exist,
+   * :attr:`capath` - resolved path to capath or ``None`` if the directory doesn't exist,
    * :attr:`openssl_cafile_env` - OpenSSL's environment key that points to a cafile,
    * :attr:`openssl_cafile` - hard coded path to a cafile,
    * :attr:`openssl_capath_env` - OpenSSL's environment key that points to a capath,
    * :attr:`openssl_capath` - hard coded path to a capath directory
+
+   Availability: LibreSSL ignores the environment vars
+   :attr:`openssl_cafile_env` and :attr:`openssl_capath_env`
 
    .. versionadded:: 3.4
 
@@ -496,6 +518,10 @@ Certificate handling
 Constants
 ^^^^^^^^^
 
+   All constants are now :class:`enum.IntEnum` or :class:`enum.IntFlag` collections.
+
+   .. versionadded:: 3.6
+
 .. data:: CERT_NONE
 
    Possible value for :attr:`SSLContext.verify_mode`, or the ``cert_reqs``
@@ -528,6 +554,12 @@ Constants
    Use of this setting requires a valid set of CA certificates to
    be passed, either to :meth:`SSLContext.load_verify_locations` or as a
    value of the ``ca_certs`` parameter to :func:`wrap_socket`.
+
+.. class:: VerifyMode
+
+   :class:`enum.IntEnum` collection of CERT_* constants.
+
+   .. versionadded:: 3.6
 
 .. data:: VERIFY_DEFAULT
 
@@ -569,10 +601,42 @@ Constants
 
    .. versionadded:: 3.4.4
 
-.. data:: PROTOCOL_SSLv23
+.. class:: VerifyFlags
+
+   :class:`enum.IntFlag` collection of VERIFY_* constants.
+
+   .. versionadded:: 3.6
+
+.. data:: PROTOCOL_TLS
 
    Selects the highest protocol version that both the client and server support.
    Despite the name, this option can select "TLS" protocols as well as "SSL".
+
+   .. versionadded:: 3.6
+
+.. data:: PROTOCOL_TLS_CLIENT
+
+   Auto-negotiate the the highest protocol version like :data:`PROTOCOL_SSLv23`,
+   but only support client-side :class:`SSLSocket` connections. The protocol
+   enables :data:`CERT_REQUIRED` and :attr:`~SSLContext.check_hostname` by
+   default.
+
+   .. versionadded:: 3.6
+
+.. data:: PROTOCOL_TLS_SERVER
+
+   Auto-negotiate the the highest protocol version like :data:`PROTOCOL_SSLv23`,
+   but only support server-side :class:`SSLSocket` connections.
+
+   .. versionadded:: 3.6
+
+.. data:: PROTOCOL_SSLv23
+
+   Alias for data:`PROTOCOL_TLS`.
+
+   .. deprecated:: 3.6
+
+      Use data:`PROTOCOL_TLS` instead.
 
 .. data:: PROTOCOL_SSLv2
 
@@ -585,6 +649,10 @@ Constants
 
       SSL version 2 is insecure.  Its use is highly discouraged.
 
+   .. deprecated:: 3.6
+
+      OpenSSL has removed support for SSLv2.
+
 .. data:: PROTOCOL_SSLv3
 
    Selects SSL version 3 as the channel encryption protocol.
@@ -596,9 +664,19 @@ Constants
 
       SSL version 3 is insecure.  Its use is highly discouraged.
 
+   .. deprecated:: 3.6
+
+      OpenSSL has deprecated all version specific protocols. Use the default
+      protocol data:`PROTOCOL_TLS` with flags like data:`OP_NO_SSLv3` instead.
+
 .. data:: PROTOCOL_TLSv1
 
    Selects TLS version 1.0 as the channel encryption protocol.
+
+   .. deprecated:: 3.6
+
+      OpenSSL has deprecated all version specific protocols. Use the default
+      protocol data:`PROTOCOL_TLS` with flags like data:`OP_NO_SSLv3` instead.
 
 .. data:: PROTOCOL_TLSv1_1
 
@@ -607,6 +685,11 @@ Constants
 
    .. versionadded:: 3.4
 
+   .. deprecated:: 3.6
+
+      OpenSSL has deprecated all version specific protocols. Use the default
+      protocol data:`PROTOCOL_TLS` with flags like data:`OP_NO_SSLv3` instead.
+
 .. data:: PROTOCOL_TLSv1_2
 
    Selects TLS version 1.2 as the channel encryption protocol. This is the
@@ -614,6 +697,11 @@ Constants
    if both sides can speak it.  Available only with openssl version 1.0.1+.
 
    .. versionadded:: 3.4
+
+   .. deprecated:: 3.6
+
+      OpenSSL has deprecated all version specific protocols. Use the default
+      protocol data:`PROTOCOL_TLS` with flags like data:`OP_NO_SSLv3` instead.
 
 .. data:: OP_ALL
 
@@ -626,23 +714,32 @@ Constants
 .. data:: OP_NO_SSLv2
 
    Prevents an SSLv2 connection.  This option is only applicable in
-   conjunction with :const:`PROTOCOL_SSLv23`.  It prevents the peers from
+   conjunction with :const:`PROTOCOL_TLS`.  It prevents the peers from
    choosing SSLv2 as the protocol version.
 
    .. versionadded:: 3.2
 
+   .. deprecated:: 3.6
+
+      SSLv2 is deprecated
+
+
 .. data:: OP_NO_SSLv3
 
    Prevents an SSLv3 connection.  This option is only applicable in
-   conjunction with :const:`PROTOCOL_SSLv23`.  It prevents the peers from
+   conjunction with :const:`PROTOCOL_TLS`.  It prevents the peers from
    choosing SSLv3 as the protocol version.
 
    .. versionadded:: 3.2
 
+   .. deprecated:: 3.6
+
+      SSLv3 is deprecated
+
 .. data:: OP_NO_TLSv1
 
    Prevents a TLSv1 connection.  This option is only applicable in
-   conjunction with :const:`PROTOCOL_SSLv23`.  It prevents the peers from
+   conjunction with :const:`PROTOCOL_TLS`.  It prevents the peers from
    choosing TLSv1 as the protocol version.
 
    .. versionadded:: 3.2
@@ -650,7 +747,7 @@ Constants
 .. data:: OP_NO_TLSv1_1
 
    Prevents a TLSv1.1 connection. This option is only applicable in conjunction
-   with :const:`PROTOCOL_SSLv23`. It prevents the peers from choosing TLSv1.1 as
+   with :const:`PROTOCOL_TLS`. It prevents the peers from choosing TLSv1.1 as
    the protocol version. Available only with openssl version 1.0.1+.
 
    .. versionadded:: 3.4
@@ -658,7 +755,7 @@ Constants
 .. data:: OP_NO_TLSv1_2
 
    Prevents a TLSv1.2 connection. This option is only applicable in conjunction
-   with :const:`PROTOCOL_SSLv23`. It prevents the peers from choosing TLSv1.2 as
+   with :const:`PROTOCOL_TLS`. It prevents the peers from choosing TLSv1.2 as
    the protocol version. Available only with openssl version 1.0.1+.
 
    .. versionadded:: 3.4
@@ -695,6 +792,16 @@ Constants
 
    .. versionadded:: 3.3
 
+.. class:: Options
+
+   :class:`enum.IntFlag` collection of OP_* constants.
+
+.. data:: OP_NO_TICKET
+
+   Prevent client side from requesting a session ticket.
+
+   .. versionadded:: 3.6
+
 .. data:: HAS_ALPN
 
    Whether the OpenSSL library has built-in support for the *Application-Layer
@@ -721,7 +828,7 @@ Constants
 
    Whether the OpenSSL library has built-in support for *Next Protocol
    Negotiation* as described in the `NPN draft specification
-   <http://tools.ietf.org/html/draft-agl-tls-nextprotoneg>`_. When true,
+   <https://tools.ietf.org/html/draft-agl-tls-nextprotoneg>`_. When true,
    you can use the :meth:`SSLContext.set_npn_protocols` method to advertise
    which protocols you want to support.
 
@@ -769,13 +876,19 @@ Constants
           ALERT_DESCRIPTION_*
 
    Alert Descriptions from :rfc:`5246` and others. The `IANA TLS Alert Registry
-   <http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-6>`_
+   <https://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-6>`_
    contains this list and references to the RFCs where their meaning is defined.
 
    Used as the return value of the callback function in
    :meth:`SSLContext.set_servername_callback`.
 
    .. versionadded:: 3.4
+
+.. class:: AlertDescription
+
+   :class:`enum.IntEnum` collection of ALERT_DESCRIPTION_* constants.
+
+   .. versionadded:: 3.6
 
 .. data:: Purpose.SERVER_AUTH
 
@@ -794,6 +907,12 @@ Constants
    be used to create server-side sockets).
 
    .. versionadded:: 3.4
+
+.. class:: SSLErrorNumber
+
+   :class:`enum.IntEnum` collection of SSL_ERROR_* constants.
+
+   .. versionadded:: 3.6
 
 
 SSL Sockets
@@ -829,7 +948,7 @@ SSL Sockets
    :ref:`notes on non-blocking sockets <ssl-nonblocking>`.
 
    Usually, :class:`SSLSocket` are not created directly, but using the
-   :func:`wrap_socket` function or the :meth:`SSLContext.wrap_socket` method.
+   the :meth:`SSLContext.wrap_socket` method.
 
    .. versionchanged:: 3.5
       The :meth:`sendfile` method was added.
@@ -839,10 +958,14 @@ SSL Sockets
       are received or sent. The socket timeout is now to maximum total duration
       of the shutdown.
 
+   .. deprecated:: 3.6
+      It is deprecated to create a :class:`SSLSocket` instance directly, use
+      :meth:`SSLContext.wrap_socket` to wrap a socket.
+
 
 SSL sockets also have the following additional methods and attributes:
 
-.. method:: SSLSocket.read(len=0, buffer=None)
+.. method:: SSLSocket.read(len=1024, buffer=None)
 
    Read up to *len* bytes of data from the SSL socket and return the result as
    a ``bytes`` instance. If *buffer* is specified, then read into the buffer
@@ -859,6 +982,9 @@ SSL sockets also have the following additional methods and attributes:
       The socket timeout is now to maximum total duration to read up to *len*
       bytes.
 
+   .. deprecated:: 3.6
+      Use :meth:`~SSLSocket.recv` instead of :meth:`~SSLSocket.read`.
+
 .. method:: SSLSocket.write(buf)
 
    Write *buf* to the SSL socket and return the number of bytes written. The
@@ -873,6 +999,9 @@ SSL sockets also have the following additional methods and attributes:
    .. versionchanged:: 3.5
       The socket timeout is no more reset each time bytes are received or sent.
       The socket timeout is now to maximum total duration to write *buf*.
+
+   .. deprecated:: 3.6
+      Use :meth:`~SSLSocket.send` instead of :meth:`~SSLSocket.write`.
 
 .. note::
 
@@ -1071,6 +1200,19 @@ SSL sockets also have the following additional methods and attributes:
 
    .. versionadded:: 3.2
 
+.. attribute:: SSLSocket.session
+
+   The :class:`SSLSession` for this SSL connection. The session is available
+   for client and server side sockets after the TLS handshake has been
+   performed. For client sockets the session can be set before
+   :meth:`~SSLSocket.do_handshake` has been called to reuse a session.
+
+   .. versionadded:: 3.6
+
+.. attribute:: SSLSocket.session_reused
+
+   .. versionadded:: 3.6
+
 
 SSL Contexts
 ------------
@@ -1082,16 +1224,27 @@ such as SSL configuration options, certificate(s) and private key(s).
 It also manages a cache of SSL sessions for server-side sockets, in order
 to speed up repeated connections from the same clients.
 
-.. class:: SSLContext(protocol)
+.. class:: SSLContext(protocol=PROTOCOL_TLS)
 
-   Create a new SSL context.  You must pass *protocol* which must be one
+   Create a new SSL context.  You may pass *protocol* which must be one
    of the ``PROTOCOL_*`` constants defined in this module.
-   :data:`PROTOCOL_SSLv23` is currently recommended for maximum
-   interoperability.
+   :data:`PROTOCOL_TLS` is currently recommended for maximum
+   interoperability and default value.
 
    .. seealso::
       :func:`create_default_context` lets the :mod:`ssl` module choose
       security settings for a given purpose.
+
+   .. versionchanged:: 3.6
+
+      The context is created with secure default values. The options
+      :data:`OP_NO_COMPRESSION`, :data:`OP_CIPHER_SERVER_PREFERENCE`,
+      :data:`OP_SINGLE_DH_USE`, :data:`OP_SINGLE_ECDH_USE`,
+      :data:`OP_NO_SSLv2` (except for :data:`PROTOCOL_SSLv2`),
+      and :data:`OP_NO_SSLv3` (except for :data:`PROTOCOL_SSLv3`) are
+      set by default. The initial cipher suite list contains only ``HIGH``
+      ciphers, no ``NULL`` ciphers and no ``MD5`` ciphers (except for
+      :data:`PROTOCOL_SSLv2`).
 
 
 :class:`SSLContext` objects have the following methods and attributes:
@@ -1174,7 +1327,7 @@ to speed up repeated connections from the same clients.
    The *capath* string, if present, is
    the path to a directory containing several CA certificates in PEM format,
    following an `OpenSSL specific layout
-   <http://www.openssl.org/docs/ssl/SSL_CTX_load_verify_locations.html>`_.
+   <https://www.openssl.org/docs/ssl/SSL_CTX_load_verify_locations.html>`_.
 
    The *cadata* object, if present, is either an ASCII string of one or more
    PEM-encoded certificates or a :term:`bytes-like object` of DER-encoded
@@ -1199,6 +1352,62 @@ to speed up repeated connections from the same clients.
 
    .. versionadded:: 3.4
 
+.. method:: SSLContext.get_ciphers()
+
+   Get a list of enabled ciphers. The list is in order of cipher priority.
+   See :meth:`SSLContext.set_ciphers`.
+
+   Example::
+
+       >>> ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+       >>> ctx.set_ciphers('ECDHE+AESGCM:!ECDSA')
+       >>> ctx.get_ciphers()  # OpenSSL 1.0.x
+       [{'alg_bits': 256,
+         'description': 'ECDHE-RSA-AES256-GCM-SHA384 TLSv1.2 Kx=ECDH     Au=RSA  '
+                        'Enc=AESGCM(256) Mac=AEAD',
+         'id': 50380848,
+         'name': 'ECDHE-RSA-AES256-GCM-SHA384',
+         'protocol': 'TLSv1/SSLv3',
+         'strength_bits': 256},
+        {'alg_bits': 128,
+         'description': 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH     Au=RSA  '
+                        'Enc=AESGCM(128) Mac=AEAD',
+         'id': 50380847,
+         'name': 'ECDHE-RSA-AES128-GCM-SHA256',
+         'protocol': 'TLSv1/SSLv3',
+         'strength_bits': 128}]
+
+   On OpenSSL 1.1 and newer the cipher dict contains additional fields::
+       >>> ctx.get_ciphers()  # OpenSSL 1.1+
+       [{'aead': True,
+         'alg_bits': 256,
+         'auth': 'auth-rsa',
+         'description': 'ECDHE-RSA-AES256-GCM-SHA384 TLSv1.2 Kx=ECDH     Au=RSA  '
+                        'Enc=AESGCM(256) Mac=AEAD',
+         'digest': None,
+         'id': 50380848,
+         'kea': 'kx-ecdhe',
+         'name': 'ECDHE-RSA-AES256-GCM-SHA384',
+         'protocol': 'TLSv1.2',
+         'strength_bits': 256,
+         'symmetric': 'aes-256-gcm'},
+        {'aead': True,
+         'alg_bits': 128,
+         'auth': 'auth-rsa',
+         'description': 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH     Au=RSA  '
+                        'Enc=AESGCM(128) Mac=AEAD',
+         'digest': None,
+         'id': 50380847,
+         'kea': 'kx-ecdhe',
+         'name': 'ECDHE-RSA-AES128-GCM-SHA256',
+         'protocol': 'TLSv1.2',
+         'strength_bits': 128,
+         'symmetric': 'aes-128-gcm'}]
+
+   Availability: OpenSSL 1.0.2+
+
+   .. versionadded:: 3.6
+
 .. method:: SSLContext.set_default_verify_paths()
 
    Load a set of default "certification authority" (CA) certificates from
@@ -1212,7 +1421,7 @@ to speed up repeated connections from the same clients.
 
    Set the available ciphers for sockets created with this context.
    It should be a string in the `OpenSSL cipher list format
-   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>`_.
+   <https://www.openssl.org/docs/apps/ciphers.html#CIPHER-LIST-FORMAT>`_.
    If no cipher can be selected (because compile-time options or other
    configuration forbids use of all the specified ciphers), an
    :class:`SSLError` will be raised.
@@ -1233,6 +1442,9 @@ to speed up repeated connections from the same clients.
    This method will raise :exc:`NotImplementedError` if :data:`HAS_ALPN` is
    False.
 
+   OpenSSL 1.1.0+ will abort the handshake and raise :exc:`SSLError` when
+   both sides support ALPN but cannot agree on a protocol.
+
    .. versionadded:: 3.5
 
 .. method:: SSLContext.set_npn_protocols(protocols)
@@ -1241,7 +1453,7 @@ to speed up repeated connections from the same clients.
    handshake. It should be a list of strings, like ``['http/1.1', 'spdy/2']``,
    ordered by preference. The selection of a protocol will happen during the
    handshake, and will play out according to the `NPN draft specification
-   <http://tools.ietf.org/html/draft-agl-tls-nextprotoneg>`_. After a
+   <https://tools.ietf.org/html/draft-agl-tls-nextprotoneg>`_. After a
    successful handshake, the :meth:`SSLSocket.selected_npn_protocol` method will
    return the agreed-upon protocol.
 
@@ -1324,7 +1536,7 @@ to speed up repeated connections from the same clients.
    This setting doesn't apply to client sockets.  You can also use the
    :data:`OP_SINGLE_ECDH_USE` option to further improve security.
 
-   This method is not available if :data:`HAS_ECDH` is False.
+   This method is not available if :data:`HAS_ECDH` is ``False``.
 
    .. versionadded:: 3.3
 
@@ -1334,7 +1546,7 @@ to speed up repeated connections from the same clients.
 
 .. method:: SSLContext.wrap_socket(sock, server_side=False, \
       do_handshake_on_connect=True, suppress_ragged_eofs=True, \
-      server_hostname=None)
+      server_hostname=None, session=None)
 
    Wrap an existing Python socket *sock* and return an :class:`SSLSocket`
    object.  *sock* must be a :data:`~socket.SOCK_STREAM` socket; other socket
@@ -1351,25 +1563,33 @@ to speed up repeated connections from the same clients.
    quite similarly to HTTP virtual hosts. Specifying *server_hostname* will
    raise a :exc:`ValueError` if *server_side* is true.
 
+   *session*, see :attr:`~SSLSocket.session`.
+
    .. versionchanged:: 3.5
       Always allow a server_hostname to be passed, even if OpenSSL does not
       have SNI.
 
+   .. versionchanged:: 3.6
+      *session* argument was added.
+
 .. method:: SSLContext.wrap_bio(incoming, outgoing, server_side=False, \
-                                server_hostname=None)
+                                server_hostname=None, session=None)
 
    Create a new :class:`SSLObject` instance by wrapping the BIO objects
    *incoming* and *outgoing*. The SSL routines will read input data from the
    incoming BIO and write data to the outgoing BIO.
 
-   The *server_side* and *server_hostname* parameters have the same meaning as
-   in :meth:`SSLContext.wrap_socket`.
+   The *server_side*, *server_hostname* and *session* parameters have the
+   same meaning as in :meth:`SSLContext.wrap_socket`.
+
+   .. versionchanged:: 3.6
+      *session* argument was added.
 
 .. method:: SSLContext.session_stats()
 
    Get statistics about the SSL sessions created or managed by this context.
    A dictionary is returned which maps the names of each `piece of information
-   <http://www.openssl.org/docs/ssl/SSL_CTX_sess_number.html>`_ to their
+   <https://www.openssl.org/docs/ssl/SSL_CTX_sess_number.html>`_ to their
    numeric values.  For example, here is the total number of hits and misses
    in the session cache since the context was created::
 
@@ -1415,6 +1635,12 @@ to speed up repeated connections from the same clients.
       to set options, not to clear them.  Attempting to clear an option
       (by resetting the corresponding bits) will raise a ``ValueError``.
 
+   .. versionchanged:: 3.6
+      :attr:`SSLContext.options` returns :class:`Options` flags:
+
+         >>> ssl.create_default_context().options
+         <Options.OP_ALL|OP_NO_SSLv3|OP_NO_SSLv2|OP_NO_COMPRESSION: 2197947391>
+
 .. attribute:: SSLContext.protocol
 
    The protocol version chosen when constructing the context.  This attribute
@@ -1429,12 +1655,23 @@ to speed up repeated connections from the same clients.
 
    .. versionadded:: 3.4
 
+   .. versionchanged:: 3.6
+      :attr:`SSLContext.verify_flags` returns :class:`VerifyFlags` flags:
+
+         >>> ssl.create_default_context().verify_flags
+         <VerifyFlags.VERIFY_X509_TRUSTED_FIRST: 32768>
+
 .. attribute:: SSLContext.verify_mode
 
    Whether to try to verify other peers' certificates and how to behave
    if verification fails.  This attribute must be one of
    :data:`CERT_NONE`, :data:`CERT_OPTIONAL` or :data:`CERT_REQUIRED`.
 
+   .. versionchanged:: 3.6
+      :attr:`SSLContext.verify_mode` returns :class:`VerifyMode` enum:
+
+         >>> ssl.create_default_context().verify_mode
+         <VerifyMode.CERT_REQUIRED: 2>
 
 .. index:: single: certificates
 
@@ -1585,7 +1822,7 @@ should use the following idiom::
    except ImportError:
        pass
    else:
-       ... # do something that requires SSL support
+       ...  # do something that requires SSL support
 
 Client-side operation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -1599,7 +1836,7 @@ If you prefer to tune security settings yourself, you might create
 a context from scratch (but beware that you might not get the settings
 right)::
 
-   >>> context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+   >>> context = ssl.SSLContext(ssl.PROTOCOL_TLS)
    >>> context.verify_mode = ssl.CERT_REQUIRED
    >>> context.check_hostname = True
    >>> context.load_verify_locations("/etc/ssl/certs/ca-bundle.crt")
@@ -1853,6 +2090,8 @@ provided.
    - :attr:`~SSLSocket.context`
    - :attr:`~SSLSocket.server_side`
    - :attr:`~SSLSocket.server_hostname`
+   - :attr:`~SSLSocket.session`
+   - :attr:`~SSLSocket.session_reused`
    - :meth:`~SSLSocket.read`
    - :meth:`~SSLSocket.write`
    - :meth:`~SSLSocket.getpeercert`
@@ -1934,6 +2173,22 @@ purpose.  It wraps an OpenSSL memory BIO (Basic IO) object:
       become true after all data currently in the buffer has been read.
 
 
+SSL session
+-----------
+
+.. versionadded:: 3.6
+
+.. class:: SSLSession
+
+   Session object used by :attr:`~SSLSocket.session`.
+
+   .. attribute:: id
+   .. attribute:: time
+   .. attribute:: timeout
+   .. attribute:: ticket_lifetime_hint
+   .. attribute:: has_ticket
+
+
 .. _ssl-security:
 
 Security considerations
@@ -2000,16 +2255,20 @@ Protocol versions
 
 SSL versions 2 and 3 are considered insecure and are therefore dangerous to
 use.  If you want maximum compatibility between clients and servers, it is
-recommended to use :const:`PROTOCOL_SSLv23` as the protocol version and then
-disable SSLv2 and SSLv3 explicitly using the :data:`SSLContext.options`
-attribute::
+recommended to use :const:`PROTOCOL_TLS_CLIENT` or
+:const:`PROTOCOL_TLS_SERVER` as the protocol version. SSLv2 and SSLv3 are
+disabled by default.
 
-   context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-   context.options |= ssl.OP_NO_SSLv2
-   context.options |= ssl.OP_NO_SSLv3
+   >>> client_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+   >>> client_context.options |= ssl.OP_NO_TLSv1
+   >>> client_context.options |= ssl.OP_NO_TLSv1_1
 
-The SSL context created above will only allow TLSv1 and later (if
-supported by your system) connections.
+
+The SSL context created above will only allow TLSv1.2 and later (if
+supported by your system) connections to a server. :const:`PROTOCOL_TLS_CLIENT`
+implies certificate validation and hostname checks by default. You have to
+load certificates into the context.
+
 
 Cipher selection
 ''''''''''''''''
@@ -2019,9 +2278,10 @@ enabled when negotiating a SSL session is possible through the
 :meth:`SSLContext.set_ciphers` method.  Starting from Python 3.2.3, the
 ssl module disables certain weak ciphers by default, but you may want
 to further restrict the cipher choice. Be sure to read OpenSSL's documentation
-about the `cipher list format <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>`_.
-If you want to check which ciphers are enabled by a given cipher list, use the
-``openssl ciphers`` command on your system.
+about the `cipher list format <https://www.openssl.org/docs/apps/ciphers.html#CIPHER-LIST-FORMAT>`_.
+If you want to check which ciphers are enabled by a given cipher list, use
+:meth:`SSLContext.get_ciphers` or the ``openssl ciphers`` command on your
+system.
 
 Multi-processing
 ^^^^^^^^^^^^^^^^
@@ -2040,26 +2300,26 @@ successful call of :func:`~ssl.RAND_add`, :func:`~ssl.RAND_bytes` or
    Class :class:`socket.socket`
        Documentation of underlying :mod:`socket` class
 
-   `SSL/TLS Strong Encryption: An Introduction <http://httpd.apache.org/docs/trunk/en/ssl/ssl_intro.html>`_
+   `SSL/TLS Strong Encryption: An Introduction <https://httpd.apache.org/docs/trunk/en/ssl/ssl_intro.html>`_
        Intro from the Apache webserver documentation
 
-   `RFC 1422: Privacy Enhancement for Internet Electronic Mail: Part II: Certificate-Based Key Management <http://www.ietf.org/rfc/rfc1422>`_
+   `RFC 1422: Privacy Enhancement for Internet Electronic Mail: Part II: Certificate-Based Key Management <https://www.ietf.org/rfc/rfc1422>`_
        Steve Kent
 
-   `RFC 1750: Randomness Recommendations for Security <http://www.ietf.org/rfc/rfc1750>`_
+   `RFC 1750: Randomness Recommendations for Security <https://www.ietf.org/rfc/rfc1750>`_
        D. Eastlake et. al.
 
-   `RFC 3280: Internet X.509 Public Key Infrastructure Certificate and CRL Profile <http://www.ietf.org/rfc/rfc3280>`_
+   `RFC 3280: Internet X.509 Public Key Infrastructure Certificate and CRL Profile <https://www.ietf.org/rfc/rfc3280>`_
        Housley et. al.
 
-   `RFC 4366: Transport Layer Security (TLS) Extensions <http://www.ietf.org/rfc/rfc4366>`_
+   `RFC 4366: Transport Layer Security (TLS) Extensions <https://www.ietf.org/rfc/rfc4366>`_
        Blake-Wilson et. al.
 
-   `RFC 5246: The Transport Layer Security (TLS) Protocol Version 1.2 <http://tools.ietf.org/html/rfc5246>`_
+   `RFC 5246: The Transport Layer Security (TLS) Protocol Version 1.2 <https://tools.ietf.org/html/rfc5246>`_
        T. Dierks et. al.
 
-   `RFC 6066: Transport Layer Security (TLS) Extensions <http://tools.ietf.org/html/rfc6066>`_
+   `RFC 6066: Transport Layer Security (TLS) Extensions <https://tools.ietf.org/html/rfc6066>`_
        D. Eastlake
 
-   `IANA TLS: Transport Layer Security (TLS) Parameters <http://www.iana.org/assignments/tls-parameters/tls-parameters.xml>`_
+   `IANA TLS: Transport Layer Security (TLS) Parameters <https://www.iana.org/assignments/tls-parameters/tls-parameters.xml>`_
        IANA

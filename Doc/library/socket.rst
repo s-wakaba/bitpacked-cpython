@@ -4,6 +4,9 @@
 .. module:: socket
    :synopsis: Low-level networking interface.
 
+**Source code:** :source:`Lib/socket.py`
+
+--------------
 
 This module provides access to the BSD *socket* interface. It is available on
 all modern Unix systems, Windows, MacOS, and probably additional platforms.
@@ -57,8 +60,10 @@ created.  Socket addresses are represented as follows:
       Previously, :const:`AF_UNIX` socket paths were assumed to use UTF-8
       encoding.
 
-   .. versionchanged: 3.5
+   .. versionchanged:: 3.5
       Writable :term:`bytes-like object` is now accepted.
+
+.. _host_port:
 
 - A pair ``(host, port)`` is used for the :const:`AF_INET` address family,
   where *host* is a string representing either a hostname in Internet domain
@@ -127,6 +132,22 @@ created.  Socket addresses are represented as follows:
     :class:`bytes` object containing the Bluetooth address in a
     string format. (ex. ``b'12:23:34:45:56:67'``) This protocol is not
     supported under FreeBSD.
+
+- :const:`AF_ALG` is a Linux-only socket based interface to Kernel
+  cryptography. An algorithm socket is configured with a tuple of two to four
+  elements ``(type, name [, feat [, mask]])``, where:
+
+  - *type* is the algorithm type as string, e.g. ``aead``, ``hash``,
+    ``skcipher`` or ``rng``.
+
+  - *name* is the algorithm name and operation mode as string, e.g.
+    ``sha256``, ``hmac(sha256)``, ``cbc(aes)`` or ``drbg_nopr_ctr_aes256``.
+
+  - *feat* and *mask* are unsigned 32bit integers.
+
+  Availability Linux 2.6.38, some algorithm types require more recent Kernels.
+
+  .. versionadded:: 3.6
 
 - Certain other address families (:const:`AF_PACKET`, :const:`AF_CAN`)
   support specific representations.
@@ -278,6 +299,10 @@ Constants
    in the Unix header files are defined; for a few symbols, default values are
    provided.
 
+   .. versionchanged:: 3.6
+      ``SO_DOMAIN``, ``SO_PROTOCOL``, ``SO_PEERSEC``, ``SO_PASSSEC``
+      were added.
+
 .. data:: AF_CAN
           PF_CAN
           SOL_CAN_*
@@ -326,17 +351,32 @@ Constants
    .. versionadded:: 3.3
 
 
-.. data:: SIO_*
+.. data:: SIO_RCVALL
+          SIO_KEEPALIVE_VALS
+          SIO_LOOPBACK_FAST_PATH
           RCVALL_*
 
    Constants for Windows' WSAIoctl(). The constants are used as arguments to the
    :meth:`~socket.socket.ioctl` method of socket objects.
+
+   .. versionchanged:: 3.6
+      ``SIO_LOOPBACK_FAST_PATH`` was added.
 
 
 .. data:: TIPC_*
 
    TIPC related constants, matching the ones exported by the C socket API. See
    the TIPC documentation for more information.
+
+.. data:: AF_ALG
+          SOL_ALG
+          ALG_*
+
+   Constants for Linux Kernel cryptography.
+
+   Availability: Linux >= 2.6.38.
+
+   .. versionadded:: 3.6
 
 .. data:: AF_LINK
 
@@ -444,9 +484,6 @@ The following functions all create :ref:`socket objects <socket-objects>`.
 
    .. versionchanged:: 3.2
       *source_address* was added.
-
-   .. versionchanged:: 3.2
-      support for the :keyword:`with` statement was added.
 
 
 .. function:: fromfd(fd, family, type, proto=0)
@@ -568,11 +605,6 @@ The :mod:`socket` module also offers various network-related services:
    Return a string containing the hostname of the machine where  the Python
    interpreter is currently executing.
 
-   If you want to know the current machine's IP address, you may want to use
-   ``gethostbyname(gethostname())``. This operation assumes that there is a
-   valid address-to-host mapping for the host, and the assumption does not
-   always hold.
-
    Note: :func:`gethostname` doesn't always return the fully qualified domain
    name; use :func:`getfqdn` for that.
 
@@ -680,7 +712,7 @@ The :mod:`socket` module also offers various network-related services:
    support IPv6, and :func:`inet_ntop` should be used instead for IPv4/v6 dual
    stack support.
 
-   .. versionchanged: 3.5
+   .. versionchanged:: 3.5
       Writable :term:`bytes-like object` is now accepted.
 
 
@@ -722,7 +754,7 @@ The :mod:`socket` module also offers various network-related services:
    .. versionchanged:: 3.4
       Windows support added
 
-   .. versionchanged: 3.5
+   .. versionchanged:: 3.5
       Writable :term:`bytes-like object` is now accepted.
 
 
@@ -836,6 +868,10 @@ Socket objects have the following methods.  Except for
 :meth:`~socket.makefile`, these correspond to Unix system calls applicable
 to sockets.
 
+.. versionchanged:: 3.2
+   Support for the :term:`context manager` protocol was added.  Exiting the
+   context manager is equivalent to calling :meth:`~socket.close`.
+
 
 .. method:: socket.accept()
 
@@ -872,6 +908,10 @@ to sockets.
    Sockets are automatically closed when they are garbage-collected, but
    it is recommended to :meth:`close` them explicitly, or to use a
    :keyword:`with` statement around them.
+
+   .. versionchanged:: 3.6
+      :exc:`OSError` is now raised if an error occurs when the underlying
+      :c:func:`close` call is made.
 
    .. note::
 
@@ -931,13 +971,12 @@ to sockets.
 
 .. method:: socket.fileno()
 
-   Return the socket's file descriptor (a small integer).  This is useful with
-   :func:`select.select`.
+   Return the socket's file descriptor (a small integer), or -1 on failure. This
+   is useful with :func:`select.select`.
 
    Under Windows the small integer returned by this method cannot be used where a
    file descriptor can be used (such as :func:`os.fdopen`).  Unix does not have
    this limitation.
-
 
 .. method:: socket.get_inheritable()
 
@@ -988,11 +1027,17 @@ to sockets.
 
    The :meth:`ioctl` method is a limited interface to the WSAIoctl system
    interface.  Please refer to the `Win32 documentation
-   <http://msdn.microsoft.com/en-us/library/ms741621%28VS.85%29.aspx>`_ for more
+   <https://msdn.microsoft.com/en-us/library/ms741621%28VS.85%29.aspx>`_ for more
    information.
 
    On other platforms, the generic :func:`fcntl.fcntl` and :func:`fcntl.ioctl`
    functions may be used; they accept a socket object as their first argument.
+
+   Currently only the following control codes are supported:
+   ``SIO_RCVALL``, ``SIO_KEEPALIVE_VALS``, and ``SIO_LOOPBACK_FAST_PATH``.
+
+   .. versionchanged:: 3.6
+      ``SIO_LOOPBACK_FAST_PATH`` was added.
 
 .. method:: socket.listen([backlog])
 
@@ -1011,7 +1056,8 @@ to sockets.
 
    Return a :term:`file object` associated with the socket.  The exact returned
    type depends on the arguments given to :meth:`makefile`.  These arguments are
-   interpreted the same way as by the built-in :func:`open` function.
+   interpreted the same way as by the built-in :func:`open` function, except
+   the only supported *mode* values are ``'r'`` (default), ``'w'`` and ``'b'``.
 
    The socket must be in blocking mode; it can have a timeout, but the file
    object's internal buffer may end up in an inconsistent state if a timeout
@@ -1212,7 +1258,7 @@ to sockets.
    much data, if any, was successfully sent.
 
    .. versionchanged:: 3.5
-      The socket timeout is no more reset each time data is sent successfuly.
+      The socket timeout is no more reset each time data is sent successfully.
       The socket timeout is now the maximum total duration to send all data.
 
    .. versionchanged:: 3.5
@@ -1276,6 +1322,15 @@ to sockets.
       an exception, the method now retries the system call instead of raising
       an :exc:`InterruptedError` exception (see :pep:`475` for the rationale).
 
+.. method:: socket.sendmsg_afalg([msg], *, op[, iv[, assoclen[, flags]]])
+
+   Specialized version of :meth:`~socket.sendmsg` for :const:`AF_ALG` socket.
+   Set mode, IV, AEAD associated data length and flags for :const:`AF_ALG` socket.
+
+   Availability: Linux >= 2.6.38
+
+   .. versionadded:: 3.6
+
 .. method:: socket.sendfile(file, offset=0, count=None)
 
    Send a file until EOF is reached by using high-performance
@@ -1324,20 +1379,28 @@ to sockets.
    For further information, please consult the :ref:`notes on socket timeouts <socket-timeouts>`.
 
 
-.. method:: socket.setsockopt(level, optname, value)
+.. method:: socket.setsockopt(level, optname, value: int)
+.. method:: socket.setsockopt(level, optname, value: buffer)
+.. method:: socket.setsockopt(level, optname, None, optlen: int)
 
    .. index:: module: struct
 
    Set the value of the given socket option (see the Unix manual page
    :manpage:`setsockopt(2)`).  The needed symbolic constants are defined in the
-   :mod:`socket` module (:const:`SO_\*` etc.).  The value can be an integer or
-   a :term:`bytes-like object` representing a buffer.  In the latter case it is
-   up to the caller to
-   ensure that the bytestring contains the proper bits (see the optional built-in
-   module :mod:`struct` for a way to encode C structures as bytestrings).
+   :mod:`socket` module (:const:`SO_\*` etc.).  The value can be an integer,
+   ``None`` or a :term:`bytes-like object` representing a buffer. In the later
+   case it is up to the caller to ensure that the bytestring contains the
+   proper bits (see the optional built-in module :mod:`struct` for a way to
+   encode C structures as bytestrings). When value is set to ``None``,
+   optlen argument is required. It's equivalent to call setsockopt C
+   function with optval=NULL and optlen=optlen.
 
-   .. versionchanged: 3.5
+
+   .. versionchanged:: 3.5
       Writable :term:`bytes-like object` is now accepted.
+
+   .. versionchanged:: 3.6
+      setsockopt(level, optname, None, optlen: int) form added.
 
 
 .. method:: socket.shutdown(how)
@@ -1366,7 +1429,7 @@ Note that there are no methods :meth:`read` or :meth:`write`; use
 :meth:`~socket.recv` and :meth:`~socket.send` without *flags* argument instead.
 
 Socket objects also have these (read-only) attributes that correspond to the
-values given to the :class:`socket` constructor.
+values given to the :class:`~socket.socket` constructor.
 
 
 .. attribute:: socket.family
@@ -1461,16 +1524,16 @@ The first two examples support IPv4 only. ::
 
    HOST = ''                 # Symbolic name meaning all available interfaces
    PORT = 50007              # Arbitrary non-privileged port
-   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-   s.bind((HOST, PORT))
-   s.listen(1)
-   conn, addr = s.accept()
-   print('Connected by', addr)
-   while True:
-       data = conn.recv(1024)
-       if not data: break
-       conn.sendall(data)
-   conn.close()
+   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+       s.bind((HOST, PORT))
+       s.listen(1)
+       conn, addr = s.accept()
+       with conn:
+           print('Connected by', addr)
+           while True:
+               data = conn.recv(1024)
+               if not data: break
+               conn.sendall(data)
 
 ::
 
@@ -1479,11 +1542,10 @@ The first two examples support IPv4 only. ::
 
    HOST = 'daring.cwi.nl'    # The remote host
    PORT = 50007              # The same port as used by the server
-   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-   s.connect((HOST, PORT))
-   s.sendall(b'Hello, world')
-   data = s.recv(1024)
-   s.close()
+   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+       s.connect((HOST, PORT))
+       s.sendall(b'Hello, world')
+       data = s.recv(1024)
    print('Received', repr(data))
 
 The next two examples are identical to the above two, but support both IPv4 and
@@ -1520,12 +1582,12 @@ sends traffic to the first one connected successfully. ::
        print('could not open socket')
        sys.exit(1)
    conn, addr = s.accept()
-   print('Connected by', addr)
-   while True:
-       data = conn.recv(1024)
-       if not data: break
-       conn.send(data)
-   conn.close()
+   with conn:
+       print('Connected by', addr)
+       while True:
+           data = conn.recv(1024)
+           if not data: break
+           conn.send(data)
 
 ::
 
@@ -1553,9 +1615,9 @@ sends traffic to the first one connected successfully. ::
    if s is None:
        print('could not open socket')
        sys.exit(1)
-   s.sendall(b'Hello, world')
-   data = s.recv(1024)
-   s.close()
+   with s:
+       s.sendall(b'Hello, world')
+       data = s.recv(1024)
    print('Received', repr(data))
 
 

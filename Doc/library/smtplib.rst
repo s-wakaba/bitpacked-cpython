@@ -3,14 +3,14 @@
 
 .. module:: smtplib
    :synopsis: SMTP protocol client (requires sockets).
+
 .. sectionauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 
+**Source code:** :source:`Lib/smtplib.py`
 
 .. index::
    pair: SMTP; protocol
    single: Simple Mail Transfer Protocol
-
-**Source code:** :source:`Lib/smtplib.py`
 
 --------------
 
@@ -33,7 +33,7 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    *timeout* parameter specifies a timeout in seconds for blocking operations
    like the connection attempt (if not specified, the global default timeout
    setting will be used).  If the timeout expires, :exc:`socket.timeout` is
-   raised.  The optional source_address parameter allows to bind
+   raised.  The optional source_address parameter allows binding
    to some specific source address in a machine with multiple network
    interfaces, and/or to some specific source TCP port. It takes a 2-tuple
    (host, port), for the socket to bind to as its source address before
@@ -76,7 +76,7 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    *port* is zero, the standard SMTP-over-SSL port (465) is used.  The optional
    arguments *local_hostname*, *timeout* and *source_address* have the same
    meaning as they do in the :class:`SMTP` class.  *context*, also optional,
-   can contain a :class:`~ssl.SSLContext` and allows to configure various
+   can contain a :class:`~ssl.SSLContext` and allows configuring various
    aspects of the secure connection.  Please read :ref:`ssl-security` for
    best practices.
 
@@ -94,6 +94,14 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
       The class now supports hostname check with
       :attr:`ssl.SSLContext.check_hostname` and *Server Name Indication* (see
       :data:`ssl.HAS_SNI`).
+
+   .. deprecated:: 3.6
+
+       *keyfile* and *certfile* are deprecated in favor of *context*.
+       Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
+       :func:`ssl.create_default_context` select the system's trusted CA
+       certificates for you.
+
 
 .. class:: LMTP(host='', port=LMTP_PORT, local_hostname=None, source_address=None)
 
@@ -341,10 +349,10 @@ An :class:`SMTP` instance has the following methods:
    :rfc:`4954` "initial response" bytes which will be encoded and sent with
    the ``AUTH`` command as below.  If the ``authobject()`` does not support an
    initial response (e.g. because it requires a challenge), it should return
-   None when called with ``challenge=None``.  If *initial_response_ok* is
-   false, then ``authobject()`` will not be called first with None.
+   ``None`` when called with ``challenge=None``.  If *initial_response_ok* is
+   false, then ``authobject()`` will not be called first with ``None``.
 
-   If the initial response check returns None, or if *initial_response_ok* is
+   If the initial response check returns ``None``, or if *initial_response_ok* is
    false, ``authobject()`` will be called to process the server's challenge
    response; the *challenge* argument it is passed will be a ``bytes``.  It
    should return ``bytes`` *data* that will be base64 encoded and sent to the
@@ -374,8 +382,9 @@ An :class:`SMTP` instance has the following methods:
    If *keyfile* and *certfile* are provided, these are passed to the :mod:`socket`
    module's :func:`ssl` function.
 
-   Optional *context* parameter is a :class:`ssl.SSLContext` object; This is an alternative to
-   using a keyfile and a certfile and if specified both *keyfile* and *certfile* should be None.
+   Optional *context* parameter is a :class:`ssl.SSLContext` object; This is
+   an alternative to using a keyfile and a certfile and if specified both
+   *keyfile* and *certfile* should be ``None``.
 
    If there has been no previous ``EHLO`` or ``HELO`` command this session,
    this method tries ESMTP ``EHLO`` first.
@@ -439,7 +448,7 @@ An :class:`SMTP` instance has the following methods:
    and the accompanying error message sent by the server.
 
    If ``SMTPUTF8`` is included in *mail_options*, and the server supports it,
-   *from_addr* and *to_addr* may contain non-ASCII characters.
+   *from_addr* and *to_addrs* may contain non-ASCII characters.
 
    This method may raise the following exceptions:
 
@@ -486,7 +495,7 @@ An :class:`SMTP` instance has the following methods:
    those arguments with addresses extracted from the headers of *msg* as
    specified in :rfc:`5322`\: *from_addr* is set to the :mailheader:`Sender`
    field if it is present, and otherwise to the :mailheader:`From` field.
-   *to_adresses* combines the values (if any) of the :mailheader:`To`,
+   *to_addrs* combines the values (if any) of the :mailheader:`To`,
    :mailheader:`Cc`, and :mailheader:`Bcc` fields from *msg*.  If exactly one
    set of :mailheader:`Resent-*` headers appear in the message, the regular
    headers are ignored and the :mailheader:`Resent-*` headers are used instead.

@@ -3,12 +3,13 @@
 
 .. module:: py_compile
    :synopsis: Generate byte-code files from Python source files.
+
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. documentation based on module docstrings
 
-.. index:: pair: file; byte-code
-
 **Source code:** :source:`Lib/py_compile.py`
+
+.. index:: pair: file; byte-code
 
 --------------
 
@@ -29,7 +30,7 @@ byte-code cache files in the directory containing the source code.
 .. function:: compile(file, cfile=None, dfile=None, doraise=False, optimize=-1)
 
    Compile a source file to byte-code and write out the byte-code cache file.
-   The source code is loaded from the file name *file*.  The byte-code is
+   The source code is loaded from the file named *file*.  The byte-code is
    written to *cfile*, which defaults to the :pep:`3147`/:pep:`488` path, ending
    in ``.pyc``.
    For example, if *file* is ``/foo/bar/baz.py`` *cfile* will default to

@@ -160,6 +160,7 @@ PyAPI_DATA(PyObject *) PyExc_EOFError;
 PyAPI_DATA(PyObject *) PyExc_FloatingPointError;
 PyAPI_DATA(PyObject *) PyExc_OSError;
 PyAPI_DATA(PyObject *) PyExc_ImportError;
+PyAPI_DATA(PyObject *) PyExc_ModuleNotFoundError;
 PyAPI_DATA(PyObject *) PyExc_IndexError;
 PyAPI_DATA(PyObject *) PyExc_KeyError;
 PyAPI_DATA(PyObject *) PyExc_KeyboardInterrupt;
@@ -254,6 +255,17 @@ PyAPI_FUNC(PyObject *) PyErr_FormatV(
     va_list vargs);
 #endif
 
+#ifndef Py_LIMITED_API
+/* Like PyErr_Format(), but saves current exception as __context__ and
+   __cause__.
+ */
+PyAPI_FUNC(PyObject *) _PyErr_FormatFromCause(
+    PyObject *exception,
+    const char *format,   /* ASCII-encoded string  */
+    ...
+    );
+#endif
+
 #ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilename(
     int ierr,
@@ -283,6 +295,9 @@ PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErr(PyObject *, int);
 
 PyAPI_FUNC(PyObject *) PyErr_SetExcWithArgsKwargs(PyObject *, PyObject *,
     PyObject *);
+
+PyAPI_FUNC(PyObject *) PyErr_SetImportErrorSubclass(PyObject *, PyObject *,
+    PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetImportError(PyObject *, PyObject *,
     PyObject *);
 

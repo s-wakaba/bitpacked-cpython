@@ -3,10 +3,14 @@
 
 .. module:: urllib.request
    :synopsis: Extensible library for opening URLs.
+
 .. moduleauthor:: Jeremy Hylton <jeremy@alum.mit.edu>
 .. sectionauthor:: Moshe Zadka <moshez@users.sourceforge.net>
 .. sectionauthor:: Senthil Kumaran <senthil@uthcode.com>
 
+**Source code:** :source:`Lib/urllib/request.py`
+
+--------------
 
 The :mod:`urllib.request` module defines functions and classes which help in
 opening URLs (mostly HTTP) in a complex world --- basic and digest
@@ -14,8 +18,8 @@ authentication, redirections, cookies and more.
 
 .. seealso::
 
-    The `Requests package <http://requests.readthedocs.org/>`_
-    is recommended for a higher-level http client interface.
+    The `Requests package <http://docs.python-requests.org/>`_
+    is recommended for a higher-level HTTP client interface.
 
 
 The :mod:`urllib.request` module defines the following functions:
@@ -26,23 +30,9 @@ The :mod:`urllib.request` module defines the following functions:
    Open the URL *url*, which can be either a string or a
    :class:`Request` object.
 
-   *data* must be a bytes object specifying additional data to be sent to the
-   server, or ``None`` if no such data is needed. *data* may also be an
-   iterable object and in that case Content-Length value must be specified in
-   the headers. Currently HTTP requests are the only ones that use *data*; the
-   HTTP request will be a POST instead of a GET when the *data* parameter is
-   provided.
-
-   *data* should be a buffer in the standard
-   :mimetype:`application/x-www-form-urlencoded` format.  The
-   :func:`urllib.parse.urlencode` function takes a mapping or sequence of
-   2-tuples and returns a string in this format. It should be encoded to bytes
-   before being used as the *data* parameter. The charset parameter in
-   ``Content-Type`` header may be used to specify the encoding. If charset
-   parameter is not sent with the Content-Type header, the server following the
-   HTTP 1.1 recommendation may assume that the data is encoded in ISO-8859-1
-   encoding. It is advisable to use charset parameter with encoding used in
-   ``Content-Type`` header with the :class:`Request`.
+   *data* must be an object specifying additional data to be sent to the
+   server, or ``None`` if no such data is needed.  See :class:`Request`
+   for details.
 
    urllib.request module uses HTTP/1.1 and includes ``Connection:close`` header
    in its HTTP requests.
@@ -64,13 +54,7 @@ The :mod:`urllib.request` module defines the following functions:
 
    The *cadefault* parameter is ignored.
 
-   For http and https urls, this function returns a
-   :class:`http.client.HTTPResponse` object which has the following
-   :ref:`httpresponse-objects` methods.
-
-   For ftp, file, and data urls and requests explicitly handled by legacy
-   :class:`URLopener` and :class:`FancyURLopener` classes, this function
-   returns a :class:`urllib.response.addinfourl` object which can work as
+   This function always returns an object which can work as a
    :term:`context manager` and has methods such as
 
    * :meth:`~urllib.response.addinfourl.geturl` --- return the URL of the resource retrieved,
@@ -78,11 +62,23 @@ The :mod:`urllib.request` module defines the following functions:
 
    * :meth:`~urllib.response.addinfourl.info` --- return the meta-information of the page, such as headers,
      in the form of an :func:`email.message_from_string` instance (see
-     `Quick Reference to HTTP Headers <http://www.cs.tut.fi/~jkorpela/http.html>`_)
+     `Quick Reference to HTTP Headers <https://www.cs.tut.fi/~jkorpela/http.html>`_)
 
    * :meth:`~urllib.response.addinfourl.getcode` -- return the HTTP status code of the response.
 
-   Raises :exc:`~urllib.error.URLError` on errors.
+   For HTTP and HTTPS URLs, this function returns a
+   :class:`http.client.HTTPResponse` object slightly modified. In addition
+   to the three new methods above, the msg attribute contains the
+   same information as the :attr:`~http.client.HTTPResponse.reason`
+   attribute --- the reason phrase returned by server --- instead of
+   the response headers as it is specified in the documentation for
+   :class:`~http.client.HTTPResponse`.
+
+   For FTP, file, and data URLs and requests explicitly handled by legacy
+   :class:`URLopener` and :class:`FancyURLopener` classes, this function
+   returns a :class:`urllib.response.addinfourl` object.
+
+   Raises :exc:`~urllib.error.URLError` on protocol errors.
 
    Note that ``None`` may be returned if no handler handles the request (though
    the default installed global :class:`OpenerDirector` uses
@@ -115,6 +111,12 @@ The :mod:`urllib.request` module defines the following functions:
    .. versionchanged:: 3.4.3
       *context* was added.
 
+   .. deprecated:: 3.6
+
+       *cafile*, *capath* and *cadefault* are deprecated in favor of *context*.
+       Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
+       :func:`ssl.create_default_context` select the system's trusted CA
+       certificates for you.
 
 .. function:: install_opener(opener)
 
@@ -165,6 +167,18 @@ The :mod:`urllib.request` module defines the following functions:
    in a case insensitive approach, for all operating systems first, and when it
    cannot find it, looks for proxy information from Mac OSX System
    Configuration for Mac OS X and Windows Systems Registry for Windows.
+   If both lowercase and uppercase environment variables exist (and disagree),
+   lowercase is preferred.
+
+    .. note::
+
+       If the environment variable ``REQUEST_METHOD`` is set, which usually
+       indicates your script is running in a CGI environment, the environment
+       variable ``HTTP_PROXY`` (uppercase ``_PROXY``) will be ignored. This is
+       because that variable can be injected by a client using the "Proxy:" HTTP
+       header. If you need to use an HTTP proxy in a CGI environment, either use
+       ``ProxyHandler`` explicitly, or make sure the variable name is in
+       lowercase (or at least the ``_proxy`` suffix).
 
 
 The following classes are provided:
@@ -175,25 +189,25 @@ The following classes are provided:
 
    *url* should be a string containing a valid URL.
 
-   *data* must be a bytes object specifying additional data to send to the
-   server, or ``None`` if no such data is needed.  Currently HTTP requests are
-   the only ones that use *data*; the HTTP request will be a POST instead of a
-   GET when the *data* parameter is provided.  *data* should be a buffer in the
-   standard :mimetype:`application/x-www-form-urlencoded` format.
+   *data* must be an object specifying additional data to send to the
+   server, or ``None`` if no such data is needed.  Currently HTTP
+   requests are the only ones that use *data*.  The supported object
+   types include bytes, file-like objects, and iterables.  If no
+   ``Content-Length`` nor ``Transfer-Encoding`` header field
+   has been provided, :class:`HTTPHandler` will set these headers according
+   to the type of *data*.  ``Content-Length`` will be used to send
+   bytes objects, while ``Transfer-Encoding: chunked`` as specified in
+   :rfc:`7230`, Section 3.3.1 will be used to send files and other iterables.
 
-   The :func:`urllib.parse.urlencode` function takes a mapping or sequence of
-   2-tuples and returns a string in this format. It should be encoded to bytes
-   before being used as the *data* parameter. The charset parameter in
-   ``Content-Type`` header may be used to specify the encoding. If charset
-   parameter is not sent with the Content-Type header, the server following the
-   HTTP 1.1 recommendation may assume that the data is encoded in ISO-8859-1
-   encoding. It is advisable to use charset parameter with encoding used in
-   ``Content-Type`` header with the :class:`Request`.
-
+   For an HTTP POST request method, *data* should be a buffer in the
+   standard :mimetype:`application/x-www-form-urlencoded` format.  The
+   :func:`urllib.parse.urlencode` function takes a mapping or sequence
+   of 2-tuples and returns an ASCII string in this format. It should
+   be encoded to bytes before being used as the *data* parameter.
 
    *headers* should be a dictionary, and will be treated as if
    :meth:`add_header` was called with each key and value as arguments.
-   This is often used to "spoof" the ``User-Agent`` header, which is
+   This is often used to "spoof" the ``User-Agent`` header value, which is
    used by a browser to identify itself -- some HTTP servers only
    allow requests coming from common browsers as opposed to scripts.
    For example, Mozilla Firefox may identify itself as ``"Mozilla/5.0
@@ -201,8 +215,10 @@ The following classes are provided:
    :mod:`urllib`'s default user agent string is
    ``"Python-urllib/2.6"`` (on Python 2.6).
 
-   An example of using ``Content-Type`` header with *data* argument would be
-   sending a dictionary like ``{"Content-Type":" application/x-www-form-urlencoded;charset=utf-8"}``.
+   An appropriate ``Content-Type`` header should be included if the *data*
+   argument is present.  If this header has not been provided and *data*
+   is not None, ``Content-Type: application/x-www-form-urlencoded`` will
+   be added as a default.
 
    The final two arguments are only of interest for correct handling
    of third-party HTTP cookies:
@@ -225,8 +241,17 @@ The following classes are provided:
    *method* should be a string that indicates the HTTP request method that
    will be used (e.g. ``'HEAD'``).  If provided, its value is stored in the
    :attr:`~Request.method` attribute and is used by :meth:`get_method()`.
-   Subclasses may indicate a default method by setting the
+   The default is ``'GET'`` if *data* is ``None`` or ``'POST'`` otherwise.
+   Subclasses may indicate a different default method by setting the
    :attr:`~Request.method` attribute in the class itself.
+
+   .. note::
+      The request will not work as expected if the data object is unable
+      to deliver its content more than once (e.g. a file or an iterable
+      that can produce the content only once) and the request is retried
+      for HTTP redirects or authentication.  The *data* is sent to the
+      HTTP server right away after the headers.  There is no support for
+      a 100-continue expectation in the library.
 
    .. versionchanged:: 3.3
       :attr:`Request.method` argument is added to the Request class.
@@ -234,6 +259,10 @@ The following classes are provided:
    .. versionchanged:: 3.4
       Default :attr:`Request.method` may be indicated at the class level.
 
+   .. versionchanged:: 3.6
+      Do not raise an error if the ``Content-Length`` has not been
+      provided and *data* is neither ``None`` nor a bytes object.
+      Fall back to use chunked transfer encoding instead.
 
 .. class:: OpenerDirector()
 
@@ -274,6 +303,16 @@ The following classes are provided:
    is retrieved from the OS X System Configuration Framework.
 
    To disable autodetected proxy pass an empty dictionary.
+
+   The :envvar:`no_proxy` environment variable can be used to specify hosts
+   which shouldn't be reached via proxy; if set, it should be a comma-separated
+   list of hostname suffixes, optionally with ``:port`` appended, for example
+   ``cern.ch,ncsa.uiuc.edu,some.host:8080``.
+
+    .. note::
+
+       ``HTTP_PROXY`` will be ignored if a variable ``REQUEST_METHOD`` is set;
+       see the documentation on :func:`~urllib.request.getproxies`.
 
 
 .. class:: HTTPPasswordMgr()
@@ -452,11 +491,11 @@ request.
 .. attribute:: Request.selector
 
    The URI path.  If the :class:`Request` uses a proxy, then selector
-   will be the full url that is passed to the proxy.
+   will be the full URL that is passed to the proxy.
 
 .. attribute:: Request.data
 
-   The entity body for the request, or None if not specified.
+   The entity body for the request, or ``None`` if not specified.
 
    .. versionchanged:: 3.4
       Changing value of :attr:`Request.data` now deletes "Content-Length"
@@ -771,8 +810,8 @@ HTTPRedirectHandler Objects
    details of the precise meanings of the various redirection codes.
 
    An :class:`HTTPError` exception raised as a security consideration if the
-   HTTPRedirectHandler is presented with a redirected url which is not an HTTP,
-   HTTPS or FTP url.
+   HTTPRedirectHandler is presented with a redirected URL which is not an HTTP,
+   HTTPS or FTP URL.
 
 
 .. method:: HTTPRedirectHandler.redirect_request(req, fp, code, msg, hdrs, newurl)
@@ -1110,6 +1149,9 @@ HTTPErrorProcessor Objects
 Examples
 --------
 
+In addition to the examples below, more examples are given in
+:ref:`urllib-howto`.
+
 This example gets the python.org main page and displays the first 300 bytes of
 it. ::
 
@@ -1125,12 +1167,12 @@ it. ::
 
 Note that urlopen returns a bytes object.  This is because there is no way
 for urlopen to automatically determine the encoding of the byte stream
-it receives from the http server. In general, a program will decode
+it receives from the HTTP server. In general, a program will decode
 the returned bytes object to string once it determines or guesses
 the appropriate encoding.
 
-The following W3C document, http://www.w3.org/International/O-charset\ , lists
-the various ways in which a (X)HTML or a XML document could have specified its
+The following W3C document, https://www.w3.org/International/O-charset\ , lists
+the various ways in which an (X)HTML or an XML document could have specified its
 encoding information.
 
 As the python.org website uses *utf-8* encoding as specified in its meta tag, we
@@ -1173,7 +1215,7 @@ The code for the sample CGI used in the above example is::
 Here is an example of doing a ``PUT`` request using :class:`Request`::
 
     import urllib.request
-    DATA=b'some data'
+    DATA = b'some data'
     req = urllib.request.Request(url='http://localhost:8080', data=DATA,method='PUT')
     with urllib.request.urlopen(req) as f:
         pass
@@ -1219,6 +1261,8 @@ Use the *headers* argument to the :class:`Request` constructor, or::
    import urllib.request
    req = urllib.request.Request('http://www.example.com/')
    req.add_header('Referer', 'http://www.python.org/')
+   # Customize the default User-Agent header value:
+   req.add_header('User-Agent', 'urllib-example/0.1 (Contact: . . .)')
    r = urllib.request.urlopen(req)
 
 :class:`OpenerDirector` automatically adds a :mailheader:`User-Agent` header to
@@ -1230,7 +1274,7 @@ every :class:`Request`.  To change this::
    opener.open('http://www.example.com/')
 
 Also, remember that a few standard headers (:mailheader:`Content-Length`,
-:mailheader:`Content-Type` without charset parameter and :mailheader:`Host`)
+:mailheader:`Content-Type` and :mailheader:`Host`)
 are added when the :class:`Request` is passed to :func:`urlopen` (or
 :meth:`OpenerDirector.open`).
 
@@ -1253,11 +1297,8 @@ from urlencode is encoded to bytes before it is sent to urlopen as data::
    >>> import urllib.request
    >>> import urllib.parse
    >>> data = urllib.parse.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
-   >>> data = data.encode('utf-8')
-   >>> request = urllib.request.Request("http://requestb.in/xrbl82xr")
-   >>> # adding charset parameter to the Content-Type header.
-   >>> request.add_header("Content-Type","application/x-www-form-urlencoded;charset=utf-8")
-   >>> with urllib.request.urlopen(request, data) as f:
+   >>> data = data.encode('ascii')
+   >>> with urllib.request.urlopen("http://requestb.in/xrbl82xr", data) as f:
    ...     print(f.read().decode('utf-8'))
    ...
 

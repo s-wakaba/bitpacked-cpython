@@ -23,6 +23,12 @@
 #  define T_POINTER T_ULONGLONG
 #endif
 
+/* Compatibility with Python 3.3 */
+#if PY_VERSION_HEX < 0x03040000
+#    define PyMem_RawMalloc PyMem_Malloc
+#    define PyMem_RawFree PyMem_Free
+#endif
+
 #define F_HANDLE F_POINTER
 #define F_ULONG_PTR F_POINTER
 #define F_DWORD "k"
@@ -238,7 +244,7 @@ PostToQueueCallback(PVOID lpParameter, BOOL TimerOrWaitFired)
     PostQueuedCompletionStatus(p->CompletionPort, TimerOrWaitFired,
                                0, p->Overlapped);
     /* ignore possible error! */
-    PyMem_Free(p);
+    PyMem_RawFree(p);
 }
 
 PyDoc_STRVAR(
@@ -262,7 +268,10 @@ overlapped_RegisterWaitWithQueue(PyObject *self, PyObject *args)
                           &Milliseconds))
         return NULL;
 
-    pdata = PyMem_Malloc(sizeof(struct PostCallbackData));
+    /* Use PyMem_RawMalloc() rather than PyMem_Malloc(), since
+       PostToQueueCallback() will call PyMem_Free() from a new C thread
+       which doesn't hold the GIL. */
+    pdata = PyMem_RawMalloc(sizeof(struct PostCallbackData));
     if (pdata == NULL)
         return SetFromWindowsErr(0);
 
@@ -273,7 +282,7 @@ overlapped_RegisterWaitWithQueue(PyObject *self, PyObject *args)
             pdata, Milliseconds,
             WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE))
     {
-        PyMem_Free(pdata);
+        PyMem_RawFree(pdata);
         return SetFromWindowsErr(0);
     }
 
@@ -964,28 +973,28 @@ Overlapped_AcceptEx(OverlappedObject *self, PyObject *args)
 static int
 parse_address(PyObject *obj, SOCKADDR *Address, int Length)
 {
-    char *Host;
+    Py_UNICODE *Host;
     unsigned short Port;
     unsigned long FlowInfo;
     unsigned long ScopeId;
 
     memset(Address, 0, Length);
 
-    if (PyArg_ParseTuple(obj, "sH", &Host, &Port))
+    if (PyArg_ParseTuple(obj, "uH", &Host, &Port))
     {
         Address->sa_family = AF_INET;
-        if (WSAStringToAddressA(Host, AF_INET, NULL, Address, &Length) < 0) {
+        if (WSAStringToAddressW(Host, AF_INET, NULL, Address, &Length) < 0) {
             SetFromWindowsErr(WSAGetLastError());
             return -1;
         }
         ((SOCKADDR_IN*)Address)->sin_port = htons(Port);
         return Length;
     }
-    else if (PyArg_ParseTuple(obj, "sHkk", &Host, &Port, &FlowInfo, &ScopeId))
+    else if (PyArg_ParseTuple(obj, "uHkk", &Host, &Port, &FlowInfo, &ScopeId))
     {
         PyErr_Clear();
         Address->sa_family = AF_INET6;
-        if (WSAStringToAddressA(Host, AF_INET6, NULL, Address, &Length) < 0) {
+        if (WSAStringToAddressW(Host, AF_INET6, NULL, Address, &Length) < 0) {
             SetFromWindowsErr(WSAGetLastError());
             return -1;
         }

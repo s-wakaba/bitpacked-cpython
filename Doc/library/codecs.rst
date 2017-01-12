@@ -3,6 +3,7 @@
 
 .. module:: codecs
    :synopsis: Encode and decode data and streams.
+
 .. moduleauthor:: Marc-André Lemburg <mal@lemburg.com>
 .. sectionauthor:: Marc-André Lemburg <mal@lemburg.com>
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
@@ -16,6 +17,8 @@
    pair: Codecs; decode
    single: streams
    pair: stackable; streams
+
+--------------
 
 This module defines base classes for standard Python codecs (encoders and
 decoders) and provides access to the internal Python codec registry, which
@@ -137,16 +140,16 @@ these additional functions which use :func:`lookup` for the codec lookup:
 
 .. function:: getreader(encoding)
 
-   Look up the codec for the given encoding and return its StreamReader class or
-   factory function.
+   Look up the codec for the given encoding and return its :class:`StreamReader`
+   class or factory function.
 
    Raises a :exc:`LookupError` in case the encoding cannot be found.
 
 
 .. function:: getwriter(encoding)
 
-   Look up the codec for the given encoding and return its StreamWriter class or
-   factory function.
+   Look up the codec for the given encoding and return its :class:`StreamWriter`
+   class or factory function.
 
    Raises a :exc:`LookupError` in case the encoding cannot be found.
 
@@ -221,6 +224,10 @@ wider range of codecs when working with binary files:
    The *errors* argument (as well as any
    other keyword argument) is passed through to the incremental encoder.
 
+   This function requires that the codec accept text :class:`str` objects
+   to encode. Therefore it does not support bytes-to-bytes encoders such as
+   ``base64_codec``.
+
 
 .. function:: iterdecode(iterator, encoding, errors='strict', **kwargs)
 
@@ -228,6 +235,11 @@ wider range of codecs when working with binary files:
    *iterator*. This function is a :term:`generator`.
    The *errors* argument (as well as any
    other keyword argument) is passed through to the incremental decoder.
+
+   This function requires that the codec accept :class:`bytes` objects
+   to decode. Therefore it does not support text-to-text encoders such as
+   ``rot_13``, although ``rot_13`` may be used equivalently with
+   :func:`iterencode`.
 
 
 The module also provides the following constants which are useful for reading
@@ -846,7 +858,7 @@ Encodings and Unicode
 ---------------------
 
 Strings are stored internally as sequences of code points in
-range ``0x0``-``0x10FFFF``.  (See :pep:`393` for
+range ``0x0``--``0x10FFFF``.  (See :pep:`393` for
 more details about the implementation.)
 Once a string object is used outside of CPU and memory, endianness
 and how these arrays are stored as bytes become an issue.  As with other
@@ -856,7 +868,7 @@ There are a variety of different text serialisation codecs, which are
 collectivity referred to as :term:`text encodings <text encoding>`.
 
 The simplest text encoding (called ``'latin-1'`` or ``'iso-8859-1'``) maps
-the code points 0-255 to the bytes ``0x0``-``0xff``, which means that a string
+the code points 0--255 to the bytes ``0x0``--``0xff``, which means that a string
 object that contains code points above ``U+00FF`` can't be encoded with this
 codec. Doing so will raise a :exc:`UnicodeEncodeError` that looks
 like the following (although the details of the error message may differ):
@@ -865,7 +877,7 @@ position 3: ordinal not in range(256)``.
 
 There's another group of encodings (the so called charmap encodings) that choose
 a different subset of all Unicode code points and how these code points are
-mapped to the bytes ``0x0``-``0xff``. To see how this is done simply open
+mapped to the bytes ``0x0``--``0xff``. To see how this is done simply open
 e.g. :file:`encodings/cp1252.py` (which is an encoding that is used primarily on
 Windows). There's a string constant with 256 characters that shows you which
 character is mapped to which byte value.
@@ -977,7 +989,7 @@ particular, the following variants typically exist:
 
 * an ISO 8859 codeset
 
-* a Microsoft Windows code page, which is typically derived from a 8859 codeset,
+* a Microsoft Windows code page, which is typically derived from an 8859 codeset,
   but replaces control characters with additional graphic characters
 
 * an IBM EBCDIC code page
@@ -1251,9 +1263,15 @@ encodings.
 |                    |         | Only ``errors='strict'``  |
 |                    |         | is supported.             |
 +--------------------+---------+---------------------------+
-| mbcs               | dbcs    | Windows only: Encode      |
-|                    |         | operand according to the  |
+| mbcs               | ansi,   | Windows only: Encode      |
+|                    | dbcs    | operand according to the  |
 |                    |         | ANSI codepage (CP_ACP)    |
++--------------------+---------+---------------------------+
+| oem                |         | Windows only: Encode      |
+|                    |         | operand according to the  |
+|                    |         | OEM codepage (CP_OEMCP)   |
+|                    |         |                           |
+|                    |         | .. versionadded:: 3.6     |
 +--------------------+---------+---------------------------+
 | palmos             |         | Encoding of PalmOS 3.5    |
 +--------------------+---------+---------------------------+
@@ -1414,7 +1432,7 @@ parameters, such as :mod:`http.client` and :mod:`ftplib`, accept Unicode host
 names (:mod:`http.client` then also transparently sends an IDNA hostname in the
 :mailheader:`Host` field if it sends that field at all).
 
-.. _section 3.1: http://tools.ietf.org/html/rfc3490#section-3.1
+.. _section 3.1: https://tools.ietf.org/html/rfc3490#section-3.1
 
 When receiving host names from the wire (such as in reverse name lookup), no
 automatic conversion to Unicode is performed: Applications wishing to present

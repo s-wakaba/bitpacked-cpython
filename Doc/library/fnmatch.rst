@@ -4,12 +4,11 @@
 .. module:: fnmatch
    :synopsis: Unix shell style filename pattern matching.
 
+**Source code:** :source:`Lib/fnmatch.py`
 
 .. index:: single: filenames; wildcard expansion
 
 .. index:: module: re
-
-**Source code:** :source:`Lib/fnmatch.py`
 
 --------------
 
@@ -75,7 +74,8 @@ patterns.
 
 .. function:: translate(pattern)
 
-   Return the shell-style *pattern* converted to a regular expression.
+   Return the shell-style *pattern* converted to a regular expression for
+   using with :func:`re.match`.
 
    Example:
 
@@ -83,7 +83,7 @@ patterns.
       >>>
       >>> regex = fnmatch.translate('*.txt')
       >>> regex
-      '.*\\.txt\\Z(?ms)'
+      '(?s:.*\\.txt)\\Z'
       >>> reobj = re.compile(regex)
       >>> reobj.match('foobar.txt')
       <_sre.SRE_Match object; span=(0, 10), match='foobar.txt'>

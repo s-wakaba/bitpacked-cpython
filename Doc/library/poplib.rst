@@ -3,12 +3,13 @@
 
 .. module:: poplib
    :synopsis: POP3 protocol client (requires sockets).
+
 .. sectionauthor:: Andrew T. Csillag
 .. revised by ESR, January 2000
 
-.. index:: pair: POP3; protocol
-
 **Source code:** :source:`Lib/poplib.py`
+
+.. index:: pair: POP3; protocol
 
 --------------
 
@@ -60,6 +61,13 @@ The :mod:`poplib` module provides two classes:
       The class now supports hostname check with
       :attr:`ssl.SSLContext.check_hostname` and *Server Name Indication* (see
       :data:`ssl.HAS_SNI`).
+
+   .. deprecated:: 3.6
+
+       *keyfile* and *certfile* are deprecated in favor of *context*.
+       Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
+       :func:`ssl.create_default_context` select the system's trusted CA
+       certificates for you.
 
 One exception is defined as an attribute of the :mod:`poplib` module:
 

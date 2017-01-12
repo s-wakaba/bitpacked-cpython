@@ -50,7 +50,7 @@ Module Objects
 
 .. c:function:: PyObject* PyModule_New(const char *name)
 
-   Similar to :c:func:`PyImport_NewObject`, but the name is an UTF-8 encoded
+   Similar to :c:func:`PyImport_NewObject`, but the name is a UTF-8 encoded
    string instead of a Unicode object.
 
 
@@ -59,10 +59,13 @@ Module Objects
    .. index:: single: __dict__ (module attribute)
 
    Return the dictionary object that implements *module*'s namespace; this object
-   is the same as the :attr:`__dict__` attribute of the module object.  This
-   function never fails.  It is recommended extensions use other
-   :c:func:`PyModule_\*` and :c:func:`PyObject_\*` functions rather than directly
-   manipulate a module's :attr:`__dict__`.
+   is the same as the :attr:`~object.__dict__` attribute of the module object.
+   If *module* is not a module object (or a subtype of a module object),
+   :exc:`SystemError` is raised and *NULL* is returned.
+
+   It is recommended extensions use other :c:func:`PyModule_\*` and
+   :c:func:`PyObject_\*` functions rather than directly manipulate a module's
+   :attr:`~object.__dict__`.
 
 
 .. c:function:: PyObject* PyModule_GetNameObject(PyObject *module)
@@ -129,7 +132,7 @@ which export an initialization function), or compiled-in modules
 (where the initialization function is added using :c:func:`PyImport_AppendInittab`).
 See :ref:`building` or :ref:`extending-with-embedding` for details.
 
-The initialization function can either pass pass a module definition instance
+The initialization function can either pass a module definition instance
 to :c:func:`PyModule_Create`, and return the resulting module object,
 or request "multi-phase initialization" by returning the definition struct itself.
 
@@ -321,7 +324,7 @@ The available slot types are:
    :c:type:`PyModule_Type`. Any type can be used, as long as it supports
    setting and getting import-related attributes.
    However, only ``PyModule_Type`` instances may be returned if the
-   ``PyModuleDef`` has non-*NULL* ``m_methods``, ``m_traverse``, ``m_clear``,
+   ``PyModuleDef`` has non-*NULL* ``m_traverse``, ``m_clear``,
    ``m_free``; non-zero ``m_size``; or slots other than ``Py_mod_create``.
 
 .. c:var:: Py_mod_exec

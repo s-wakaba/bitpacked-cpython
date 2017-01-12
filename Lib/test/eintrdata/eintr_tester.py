@@ -9,7 +9,7 @@ sub-second periodicity (contrarily to signal()).
 """
 
 import contextlib
-import io
+import faulthandler
 import os
 import select
 import signal
@@ -50,6 +50,10 @@ class EINTRBaseTest(unittest.TestCase):
         signal.setitimer(signal.ITIMER_REAL, cls.signal_delay,
                          cls.signal_period)
 
+        # Issue #25277: Use faulthandler to try to debug a hang on FreeBSD
+        if hasattr(faulthandler, 'dump_traceback_later'):
+            faulthandler.dump_traceback_later(10 * 60, exit=True)
+
     @classmethod
     def stop_alarm(cls):
         signal.setitimer(signal.ITIMER_REAL, 0, 0)
@@ -58,6 +62,8 @@ class EINTRBaseTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.stop_alarm()
         signal.signal(signal.SIGALRM, cls.orig_handler)
+        if hasattr(faulthandler, 'cancel_dump_traceback_later'):
+            faulthandler.cancel_dump_traceback_later()
 
     def subprocess(self, *args, **kw):
         cmd_args = (sys.executable, '-c') + args
@@ -77,6 +83,9 @@ class OSEINTRTest(EINTRBaseTest):
         processes = [self.new_sleep_process() for _ in range(num)]
         for _ in range(num):
             wait_func()
+        # Call the Popen method to avoid a ResourceWarning
+        for proc in processes:
+            proc.wait()
 
     def test_wait(self):
         self._test_wait_multiple(os.wait)
@@ -88,6 +97,8 @@ class OSEINTRTest(EINTRBaseTest):
     def _test_wait_single(self, wait_func):
         proc = self.new_sleep_process()
         wait_func(proc.pid)
+        # Call the Popen method to avoid a ResourceWarning
+        proc.wait()
 
     def test_waitpid(self):
         self._test_wait_single(lambda pid: os.waitpid(pid, 0))
@@ -334,10 +345,12 @@ class SocketEINTRTest(EINTRBaseTest):
         self._test_open("fp = open(path, 'r')\nfp.close()",
                         self.python_open)
 
+    @unittest.skipIf(sys.platform == 'darwin', "hangs under OS X; see issue #25234")
     def os_open(self, path):
         fd = os.open(path, os.O_WRONLY)
         os.close(fd)
 
+    @unittest.skipIf(sys.platform == "darwin", "hangs under OS X; see issue #25234")
     def test_os_open(self):
         self._test_open("fd = os.open(path, os.O_RDONLY)\nos.close(fd)",
                         self.os_open)
@@ -370,10 +383,10 @@ class SignalEINTRTest(EINTRBaseTest):
     @unittest.skipUnless(hasattr(signal, 'sigwaitinfo'),
                          'need signal.sigwaitinfo()')
     def test_sigwaitinfo(self):
-        # Issue #25277: The sleep is a weak synchronization between the parent
-        # and the child process. If the sleep is too low, the test hangs on
-        # slow or highly loaded systems.
-        self.sleep_time = 2.0
+        # Issue #25277, #25868: give a few milliseconds to the parent process
+        # between os.write() and signal.sigwaitinfo() to works around a race
+        # condition
+        self.sleep_time = 0.100
 
         signum = signal.SIGUSR1
         pid = os.getpid()
@@ -381,18 +394,28 @@ class SignalEINTRTest(EINTRBaseTest):
         old_handler = signal.signal(signum, lambda *args: None)
         self.addCleanup(signal.signal, signum, old_handler)
 
+        rpipe, wpipe = os.pipe()
+
         code = '\n'.join((
             'import os, time',
             'pid = %s' % os.getpid(),
             'signum = %s' % int(signum),
             'sleep_time = %r' % self.sleep_time,
+            'rpipe = %r' % rpipe,
+            'os.read(rpipe, 1)',
+            'os.close(rpipe)',
             'time.sleep(sleep_time)',
             'os.kill(pid, signum)',
         ))
 
         t0 = time.monotonic()
-        proc = self.subprocess(code)
+        proc = self.subprocess(code, pass_fds=(rpipe,))
+        os.close(rpipe)
         with kill_on_error(proc):
+            # sync child-parent
+            os.write(wpipe, b'x')
+            os.close(wpipe)
+
             # parent
             signal.sigwaitinfo([signum])
             dt = time.monotonic() - t0

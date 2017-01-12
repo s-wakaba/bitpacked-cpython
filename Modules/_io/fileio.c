@@ -92,8 +92,7 @@ fileio_dealloc_warn(fileio *self, PyObject *source)
     if (self->fd >= 0 && self->closefd) {
         PyObject *exc, *val, *tb;
         PyErr_Fetch(&exc, &val, &tb);
-        if (PyErr_WarnFormat(PyExc_ResourceWarning, 1,
-                             "unclosed file %R", source)) {
+        if (PyErr_ResourceWarning(source, 1, "unclosed file %R", source)) {
             /* Spurious errors can appear at shutdown */
             if (PyErr_ExceptionMatches(PyExc_Warning))
                 PyErr_WriteUnraisable((PyObject *) self);
@@ -118,18 +117,13 @@ internal_close(fileio *self)
         int fd = self->fd;
         self->fd = -1;
         /* fd is accessible and someone else may have closed it */
-        if (_PyVerify_fd(fd)) {
-            Py_BEGIN_ALLOW_THREADS
-            _Py_BEGIN_SUPPRESS_IPH
-            err = close(fd);
-            if (err < 0)
-                save_errno = errno;
-            _Py_END_SUPPRESS_IPH
-            Py_END_ALLOW_THREADS
-        } else {
+        Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
+        err = close(fd);
+        if (err < 0)
             save_errno = errno;
-            err = -1;
-        }
+        _Py_END_SUPPRESS_IPH
+        Py_END_ALLOW_THREADS
     }
     if (err < 0) {
         errno = save_errno;
@@ -250,6 +244,7 @@ _io_FileIO___init___impl(fileio *self, PyObject *nameobj, const char *mode,
     int *atomic_flag_works = NULL;
 #endif
     struct _Py_stat_struct fdfstat;
+    int fstat_result;
     int async_err = 0;
 
     assert(PyFileIO_Check(self));
@@ -420,7 +415,13 @@ _io_FileIO___init___impl(fileio *self, PyObject *nameobj, const char *mode,
 
             self->fd = _PyLong_AsInt(fdobj);
             Py_DECREF(fdobj);
-            if (self->fd == -1) {
+            if (self->fd < 0) {
+                if (!PyErr_Occurred()) {
+                    /* The opener returned a negative but didn't set an
+                       exception.  See issue #27066 */
+                    PyErr_Format(PyExc_ValueError,
+                                 "opener returned %d", self->fd);
+                }
                 goto error;
             }
         }
@@ -438,22 +439,39 @@ _io_FileIO___init___impl(fileio *self, PyObject *nameobj, const char *mode,
     }
 
     self->blksize = DEFAULT_BUFFER_SIZE;
-    if (_Py_fstat(self->fd, &fdfstat) < 0)
-        goto error;
-#if defined(S_ISDIR) && defined(EISDIR)
-    /* On Unix, open will succeed for directories.
-       In Python, there should be no file objects referring to
-       directories, so we need a check.  */
-    if (S_ISDIR(fdfstat.st_mode)) {
-        errno = EISDIR;
-        PyErr_SetFromErrnoWithFilenameObject(PyExc_IOError, nameobj);
-        goto error;
+    Py_BEGIN_ALLOW_THREADS
+    fstat_result = _Py_fstat_noraise(self->fd, &fdfstat);
+    Py_END_ALLOW_THREADS
+    if (fstat_result < 0) {
+        /* Tolerate fstat() errors other than EBADF.  See Issue #25717, where
+        an anonymous file on a Virtual Box shared folder filesystem would
+        raise ENOENT. */
+#ifdef MS_WINDOWS
+        if (GetLastError() == ERROR_INVALID_HANDLE) {
+            PyErr_SetFromWindowsErr(0);
+#else
+        if (errno == EBADF) {
+            PyErr_SetFromErrno(PyExc_OSError);
+#endif
+            goto error;
+        }
     }
+    else {
+#if defined(S_ISDIR) && defined(EISDIR)
+        /* On Unix, open will succeed for directories.
+           In Python, there should be no file objects referring to
+           directories, so we need a check.  */
+        if (S_ISDIR(fdfstat.st_mode)) {
+            errno = EISDIR;
+            PyErr_SetFromErrnoWithFilenameObject(PyExc_IOError, nameobj);
+            goto error;
+        }
 #endif /* defined(S_ISDIR) */
 #ifdef HAVE_STRUCT_STAT_ST_BLKSIZE
-    if (fdfstat.st_blksize > 1)
-        self->blksize = fdfstat.st_blksize;
+        if (fdfstat.st_blksize > 1)
+            self->blksize = fdfstat.st_blksize;
 #endif /* HAVE_STRUCT_STAT_ST_BLKSIZE */
+    }
 
 #if defined(MS_WINDOWS) || defined(__CYGWIN__)
     /* don't translate newlines (\r\n <=> \n) */
@@ -522,7 +540,7 @@ err_closed(void)
 }
 
 static PyObject *
-err_mode(char *action)
+err_mode(const char *action)
 {
     _PyIO_State *state = IO_STATE();
     if (state != NULL)
@@ -677,8 +695,6 @@ _io_FileIO_readall_impl(fileio *self)
 
     if (self->fd < 0)
         return err_closed();
-    if (!_PyVerify_fd(self->fd))
-        return PyErr_SetFromErrno(PyExc_IOError);
 
     _Py_BEGIN_SUPPRESS_IPH
 #ifdef MS_WINDOWS
@@ -818,7 +834,7 @@ _io.FileIO.write
     b: Py_buffer
     /
 
-Write bytes b to file, return number written.
+Write buffer b to file, return number of bytes written.
 
 Only makes one system call, so not all of the data may be written.
 The number of bytes actually written is returned.  In non-blocking mode,
@@ -827,7 +843,7 @@ returns None if the write would block.
 
 static PyObject *
 _io_FileIO_write_impl(fileio *self, Py_buffer *b)
-/*[clinic end generated code: output=b4059db3d363a2f7 input=ffbd8834f447ac31]*/
+/*[clinic end generated code: output=b4059db3d363a2f7 input=6e7908b36f0ce74f]*/
 {
     Py_ssize_t n;
     int err;
@@ -891,18 +907,15 @@ portable_lseek(int fd, PyObject *posobj, int whence)
             return NULL;
     }
 
-    if (_PyVerify_fd(fd)) {
-        Py_BEGIN_ALLOW_THREADS
-        _Py_BEGIN_SUPPRESS_IPH
+    Py_BEGIN_ALLOW_THREADS
+    _Py_BEGIN_SUPPRESS_IPH
 #ifdef MS_WINDOWS
-        res = _lseeki64(fd, pos, whence);
+    res = _lseeki64(fd, pos, whence);
 #else
-        res = lseek(fd, pos, whence);
+    res = lseek(fd, pos, whence);
 #endif
-        _Py_END_SUPPRESS_IPH
-        Py_END_ALLOW_THREADS
-    } else
-        res = -1;
+    _Py_END_SUPPRESS_IPH
+    Py_END_ALLOW_THREADS
     if (res < 0)
         return PyErr_SetFromErrno(PyExc_IOError);
 
@@ -1025,7 +1038,7 @@ _io_FileIO_truncate_impl(fileio *self, PyObject *posobj)
 }
 #endif /* HAVE_FTRUNCATE */
 
-static char *
+static const char *
 mode_string(fileio *self)
 {
     if (self->created) {
@@ -1093,10 +1106,7 @@ _io_FileIO_isatty_impl(fileio *self)
         return err_closed();
     Py_BEGIN_ALLOW_THREADS
     _Py_BEGIN_SUPPRESS_IPH
-    if (_PyVerify_fd(self->fd))
-        res = isatty(self->fd);
-    else
-        res = 0;
+    res = isatty(self->fd);
     _Py_END_SUPPRESS_IPH
     Py_END_ALLOW_THREADS
     return PyBool_FromLong(res);

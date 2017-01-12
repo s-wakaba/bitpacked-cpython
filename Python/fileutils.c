@@ -44,7 +44,7 @@ _Py_device_encoding(int fd)
 #endif
     int valid;
     _Py_BEGIN_SUPPRESS_IPH
-    valid = _PyVerify_fd(fd) && isatty(fd);
+    valid = isatty(fd);
     _Py_END_SUPPRESS_IPH
     if (!valid)
         Py_RETURN_NONE;
@@ -104,23 +104,24 @@ check_force_ascii(void)
     char *loc;
 #if defined(HAVE_LANGINFO_H) && defined(CODESET)
     char *codeset, **alias;
-    char encoding[100];
+    char encoding[20];   /* longest name: "iso_646.irv_1991\0" */
     int is_ascii;
     unsigned int i;
     char* ascii_aliases[] = {
         "ascii",
+        /* Aliases from Lib/encodings/aliases.py */
         "646",
-        "ansi-x3.4-1968",
-        "ansi-x3-4-1968",
-        "ansi-x3.4-1986",
+        "ansi_x3.4_1968",
+        "ansi_x3.4_1986",
+        "ansi_x3_4_1968",
         "cp367",
         "csascii",
         "ibm367",
-        "iso646-us",
-        "iso-646.irv-1991",
-        "iso-ir-6",
+        "iso646_us",
+        "iso_646.irv_1991",
+        "iso_ir_6",
         "us",
-        "us-ascii",
+        "us_ascii",
         NULL
     };
 #endif
@@ -176,7 +177,7 @@ check_force_ascii(void)
 #endif
 
 error:
-    /* if an error occured, force the ASCII encoding */
+    /* if an error occurred, force the ASCII encoding */
     return 1;
 }
 
@@ -599,7 +600,7 @@ _Py_attribute_data_to_stat(BY_HANDLE_FILE_INFORMATION *info, ULONG reparse_tag,
 
    On Windows, use GetFileType() and GetFileInformationByHandle() which support
    files larger than 2 GB.  fstat() may fail with EOVERFLOW on files larger
-   than 2 GB because the file size type is an signed 32-bit integer: see issue
+   than 2 GB because the file size type is a signed 32-bit integer: see issue
    #23152.
 
    On Windows, set the last Windows error and return nonzero on error. On
@@ -613,13 +614,9 @@ _Py_fstat_noraise(int fd, struct _Py_stat_struct *status)
     HANDLE h;
     int type;
 
-    if (!_PyVerify_fd(fd))
-        h = INVALID_HANDLE_VALUE;
-    else {
-        _Py_BEGIN_SUPPRESS_IPH
-        h = (HANDLE)_get_osfhandle(fd);
-        _Py_END_SUPPRESS_IPH
-    }
+    _Py_BEGIN_SUPPRESS_IPH
+    h = (HANDLE)_get_osfhandle(fd);
+    _Py_END_SUPPRESS_IPH
 
     if (h == INVALID_HANDLE_VALUE) {
         /* errno is already set by _get_osfhandle, but we also set
@@ -669,7 +666,7 @@ _Py_fstat_noraise(int fd, struct _Py_stat_struct *status)
 
    On Windows, use GetFileType() and GetFileInformationByHandle() which support
    files larger than 2 GB.  fstat() may fail with EOVERFLOW on files larger
-   than 2 GB because the file size type is an signed 32-bit integer: see issue
+   than 2 GB because the file size type is a signed 32-bit integer: see issue
    #23152.
 
    Raise an exception and return -1 on error. On Windows, set the last Windows
@@ -682,6 +679,10 @@ int
 _Py_fstat(int fd, struct _Py_stat_struct *status)
 {
     int res;
+
+#ifdef WITH_THREAD
+    assert(PyGILState_Check());
+#endif
 
     Py_BEGIN_ALLOW_THREADS
     res = _Py_fstat_noraise(fd, status);
@@ -738,12 +739,6 @@ get_inheritable(int fd, int raise)
     HANDLE handle;
     DWORD flags;
 
-    if (!_PyVerify_fd(fd)) {
-        if (raise)
-            PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
-    }
-
     _Py_BEGIN_SUPPRESS_IPH
     handle = (HANDLE)_get_osfhandle(fd);
     _Py_END_SUPPRESS_IPH
@@ -794,7 +789,7 @@ set_inheritable(int fd, int inheritable, int raise, int *atomic_flag_works)
     int request;
     int err;
 #endif
-    int flags;
+    int flags, new_flags;
     int res;
 #endif
 
@@ -815,12 +810,6 @@ set_inheritable(int fd, int inheritable, int raise, int *atomic_flag_works)
     }
 
 #ifdef MS_WINDOWS
-    if (!_PyVerify_fd(fd)) {
-        if (raise)
-            PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
-    }
-
     _Py_BEGIN_SUPPRESS_IPH
     handle = (HANDLE)_get_osfhandle(fd);
     _Py_END_SUPPRESS_IPH
@@ -856,7 +845,7 @@ set_inheritable(int fd, int inheritable, int raise, int *atomic_flag_works)
             return 0;
         }
 
-        if (errno != ENOTTY) {
+        if (errno != ENOTTY && errno != EACCES) {
             if (raise)
                 PyErr_SetFromErrno(PyExc_OSError);
             return -1;
@@ -865,7 +854,12 @@ set_inheritable(int fd, int inheritable, int raise, int *atomic_flag_works)
             /* Issue #22258: Here, ENOTTY means "Inappropriate ioctl for
                device". The ioctl is declared but not supported by the kernel.
                Remember that ioctl() doesn't work. It is the case on
-               Illumos-based OS for example. */
+               Illumos-based OS for example.
+
+               Issue #27057: When SELinux policy disallows ioctl it will fail
+               with EACCES. While FIOCLEX is safe operation it may be
+               unavailable because ioctl was denied altogether.
+               This can be the case on Android. */
             ioctl_works = 0;
         }
         /* fallback to fcntl() if ioctl() does not work */
@@ -880,11 +874,19 @@ set_inheritable(int fd, int inheritable, int raise, int *atomic_flag_works)
         return -1;
     }
 
-    if (inheritable)
-        flags &= ~FD_CLOEXEC;
-    else
-        flags |= FD_CLOEXEC;
-    res = fcntl(fd, F_SETFD, flags);
+    if (inheritable) {
+        new_flags = flags & ~FD_CLOEXEC;
+    }
+    else {
+        new_flags = flags | FD_CLOEXEC;
+    }
+
+    if (new_flags == flags) {
+        /* FD_CLOEXEC flag already set/cleared: nothing to do */
+        return 0;
+    }
+
+    res = fcntl(fd, F_SETFD, new_flags);
     if (res < 0) {
         if (raise)
             PyErr_SetFromErrno(PyExc_OSError);
@@ -1164,18 +1166,14 @@ _Py_read(int fd, void *buf, size_t count)
     int err;
     int async_err = 0;
 
+#ifdef WITH_THREAD
+    assert(PyGILState_Check());
+#endif
+
     /* _Py_read() must not be called with an exception set, otherwise the
      * caller may think that read() was interrupted by a signal and the signal
      * handler raised an exception. */
     assert(!PyErr_Occurred());
-
-    if (!_PyVerify_fd(fd)) {
-        /* save/restore errno because PyErr_SetFromErrno() can modify it */
-        err = errno;
-        PyErr_SetFromErrno(PyExc_OSError);
-        errno = err;
-        return -1;
-    }
 
 #ifdef MS_WINDOWS
     if (count > INT_MAX) {
@@ -1229,16 +1227,6 @@ _Py_write_impl(int fd, const void *buf, size_t count, int gil_held)
     Py_ssize_t n;
     int err;
     int async_err = 0;
-
-    if (!_PyVerify_fd(fd)) {
-        if (gil_held) {
-            /* save/restore errno because PyErr_SetFromErrno() can modify it */
-            err = errno;
-            PyErr_SetFromErrno(PyExc_OSError);
-            errno = err;
-        }
-        return -1;
-    }
 
     _Py_BEGIN_SUPPRESS_IPH
 #ifdef MS_WINDOWS
@@ -1319,6 +1307,10 @@ _Py_write_impl(int fd, const void *buf, size_t count, int gil_held)
 Py_ssize_t
 _Py_write(int fd, const void *buf, size_t count)
 {
+#ifdef WITH_THREAD
+    assert(PyGILState_Check());
+#endif
+
     /* _Py_write() must not be called with an exception set, otherwise the
      * caller may think that write() was interrupted by a signal and the signal
      * handler raised an exception. */
@@ -1468,10 +1460,9 @@ _Py_dup(int fd)
     DWORD ftype;
 #endif
 
-    if (!_PyVerify_fd(fd)) {
-        PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
-    }
+#ifdef WITH_THREAD
+    assert(PyGILState_Check());
+#endif
 
 #ifdef MS_WINDOWS
     _Py_BEGIN_SUPPRESS_IPH
@@ -1595,84 +1586,3 @@ error:
     return -1;
 }
 #endif
-
-#if defined _MSC_VER && _MSC_VER >= 1400 && _MSC_VER < 1900
-/* Legacy implementation of _PyVerify_fd while transitioning to
- * MSVC 14.0. This should eventually be removed. (issue23524)
- */
-
-/* Microsoft CRT in VS2005 and higher will verify that a filehandle is
- * valid and raise an assertion if it isn't.
- * Normally, an invalid fd is likely to be a C program error and therefore
- * an assertion can be useful, but it does contradict the POSIX standard
- * which for write(2) states:
- *    "Otherwise, -1 shall be returned and errno set to indicate the error."
- *    "[EBADF] The fildes argument is not a valid file descriptor open for
- *     writing."
- * Furthermore, python allows the user to enter any old integer
- * as a fd and should merely raise a python exception on error.
- * The Microsoft CRT doesn't provide an official way to check for the
- * validity of a file descriptor, but we can emulate its internal behaviour
- * by using the exported __pinfo data member and knowledge of the
- * internal structures involved.
- * The structures below must be updated for each version of visual studio
- * according to the file internal.h in the CRT source, until MS comes
- * up with a less hacky way to do this.
- * (all of this is to avoid globally modifying the CRT behaviour using
- * _set_invalid_parameter_handler() and _CrtSetReportMode())
- */
-/* The actual size of the structure is determined at runtime.
- * Only the first items must be present.
- */
-typedef struct {
-    intptr_t osfhnd;
-    char osfile;
-} my_ioinfo;
-
-extern __declspec(dllimport) char * __pioinfo[];
-#define IOINFO_L2E 5
-#define IOINFO_ARRAYS 64
-#define IOINFO_ARRAY_ELTS   (1 << IOINFO_L2E)
-#define _NHANDLE_           (IOINFO_ARRAYS * IOINFO_ARRAY_ELTS)
-#define FOPEN 0x01
-#define _NO_CONSOLE_FILENO (intptr_t)-2
-
-/* This function emulates what the windows CRT does to validate file handles */
-int
-_PyVerify_fd(int fd)
-{
-    const int i1 = fd >> IOINFO_L2E;
-    const int i2 = fd & ((1 << IOINFO_L2E) - 1);
-
-    static size_t sizeof_ioinfo = 0;
-
-    /* Determine the actual size of the ioinfo structure,
-     * as used by the CRT loaded in memory
-     */
-    if (sizeof_ioinfo == 0 && __pioinfo[0] != NULL) {
-        sizeof_ioinfo = _msize(__pioinfo[0]) / IOINFO_ARRAY_ELTS;
-    }
-    if (sizeof_ioinfo == 0) {
-        /* This should not happen... */
-        goto fail;
-    }
-
-    /* See that it isn't a special CLEAR fileno */
-    if (fd != _NO_CONSOLE_FILENO) {
-        /* Microsoft CRT would check that 0<=fd<_nhandle but we can't do that.  Instead
-         * we check pointer validity and other info
-         */
-        if (0 <= i1 && i1 < IOINFO_ARRAYS && __pioinfo[i1] != NULL) {
-            /* finally, check that the file is open */
-            my_ioinfo* info = (my_ioinfo*)(__pioinfo[i1] + i2 * sizeof_ioinfo);
-            if (info->osfile & FOPEN) {
-                return 1;
-            }
-        }
-    }
-  fail:
-    errno = EBADF;
-    return 0;
-}
-
-#endif /* defined _MSC_VER && _MSC_VER >= 1400 && _MSC_VER < 1900 */

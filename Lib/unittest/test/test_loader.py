@@ -8,7 +8,7 @@ import unittest
 # test isolation and reproducibility.
 def warningregistry(func):
     def wrapper(*args, **kws):
-        missing = object()
+        missing = []
         saved = getattr(warnings, '__warningregistry__', missing).copy()
         try:
             return func(*args, **kws)
@@ -20,6 +20,7 @@ def warningregistry(func):
                     pass
             else:
                 warnings.__warningregistry__ = saved
+    return wrapper
 
 
 class Test_TestLoader(unittest.TestCase):
@@ -197,9 +198,9 @@ class Test_TestLoader(unittest.TestCase):
         # ignored (and deprecated).
         load_tests_args = []
         with warnings.catch_warnings(record=False):
-            warnings.simplefilter('never')
+            warnings.simplefilter('ignore')
             suite = loader.loadTestsFromModule(m, use_load_tests=False)
-            self.assertEqual(load_tests_args, [loader, suite, None])
+        self.assertEqual(load_tests_args, [loader, suite, None])
 
     @warningregistry
     def test_loadTestsFromModule__use_load_tests_deprecated_positional(self):
@@ -221,10 +222,10 @@ class Test_TestLoader(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
             suite = loader.loadTestsFromModule(m, False)
-            self.assertIsInstance(suite, unittest.TestSuite)
-            # load_tests was still called because use_load_tests is deprecated
-            # and ignored.
-            self.assertEqual(load_tests_args, [loader, suite, None])
+        self.assertIsInstance(suite, unittest.TestSuite)
+        # load_tests was still called because use_load_tests is deprecated
+        # and ignored.
+        self.assertEqual(load_tests_args, [loader, suite, None])
         # We got a warning.
         self.assertIs(w[-1].category, DeprecationWarning)
         self.assertEqual(str(w[-1].message),
@@ -249,14 +250,14 @@ class Test_TestLoader(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
             suite = loader.loadTestsFromModule(m, use_load_tests=False)
-            self.assertIsInstance(suite, unittest.TestSuite)
-            # load_tests was still called because use_load_tests is deprecated
-            # and ignored.
-            self.assertEqual(load_tests_args, [loader, suite, None])
-            # We got a warning.
-            self.assertIs(w[-1].category, DeprecationWarning)
-            self.assertEqual(str(w[-1].message),
-                                 'use_load_tests is deprecated and ignored')
+        self.assertIsInstance(suite, unittest.TestSuite)
+        # load_tests was still called because use_load_tests is deprecated
+        # and ignored.
+        self.assertEqual(load_tests_args, [loader, suite, None])
+        # We got a warning.
+        self.assertIs(w[-1].category, DeprecationWarning)
+        self.assertEqual(str(w[-1].message),
+                             'use_load_tests is deprecated and ignored')
 
     @warningregistry
     def test_loadTestsFromModule__too_many_positional_args(self):
@@ -274,17 +275,18 @@ class Test_TestLoader(unittest.TestCase):
         m.load_tests = load_tests
         loader = unittest.TestLoader()
         with self.assertRaises(TypeError) as cm, \
-             warnings.catch_warning(record=True) as w:
+             warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
             loader.loadTestsFromModule(m, False, 'testme.*')
-            # We still got the deprecation warning.
-            self.assertIs(w[-1].category, DeprecationWarning)
-            self.assertEqual(str(w[-1].message),
-                                 'use_load_tests is deprecated and ignored')
-            # We also got a TypeError for too many positional arguments.
-            self.assertEqual(type(cm.exception), TypeError)
-            self.assertEqual(
-                str(cm.exception),
-                'loadTestsFromModule() takes 1 positional argument but 3 were given')
+        # We still got the deprecation warning.
+        self.assertIs(w[-1].category, DeprecationWarning)
+        self.assertEqual(str(w[-1].message),
+                                'use_load_tests is deprecated and ignored')
+        # We also got a TypeError for too many positional arguments.
+        self.assertEqual(type(cm.exception), TypeError)
+        self.assertEqual(
+            str(cm.exception),
+            'loadTestsFromModule() takes 1 positional argument but 3 were given')
 
     @warningregistry
     def test_loadTestsFromModule__use_load_tests_other_bad_keyword(self):
@@ -302,7 +304,7 @@ class Test_TestLoader(unittest.TestCase):
         m.load_tests = load_tests
         loader = unittest.TestLoader()
         with warnings.catch_warnings():
-            warnings.simplefilter('never')
+            warnings.simplefilter('ignore')
             with self.assertRaises(TypeError) as cm:
                 loader.loadTestsFromModule(
                     m, use_load_tests=False, very_bad=True, worse=False)
@@ -388,7 +390,7 @@ class Test_TestLoader(unittest.TestCase):
         suite = loader.loadTestsFromName('abc () //')
         error, test = self.check_deferred_error(loader, suite)
         expected = "Failed to import test module: abc () //"
-        expected_regex = "Failed to import test module: abc \(\) //"
+        expected_regex = r"Failed to import test module: abc \(\) //"
         self.assertIn(
             expected, error,
             'missing error string in %r' % error)
@@ -500,7 +502,7 @@ class Test_TestLoader(unittest.TestCase):
         suite = loader.loadTestsFromName('abc () //', unittest)
         error, test = self.check_deferred_error(loader, suite)
         expected = "module 'unittest' has no attribute 'abc () //'"
-        expected_regex = "module 'unittest' has no attribute 'abc \(\) //'"
+        expected_regex = r"module 'unittest' has no attribute 'abc \(\) //'"
         self.assertIn(
             expected, error,
             'missing error string in %r' % error)
@@ -807,7 +809,7 @@ class Test_TestLoader(unittest.TestCase):
         suite = loader.loadTestsFromNames(['abc () //'])
         error, test = self.check_deferred_error(loader, list(suite)[0])
         expected = "Failed to import test module: abc () //"
-        expected_regex = "Failed to import test module: abc \(\) //"
+        expected_regex = r"Failed to import test module: abc \(\) //"
         self.assertIn(
             expected,  error,
             'missing error string in %r' % error)
@@ -926,7 +928,7 @@ class Test_TestLoader(unittest.TestCase):
         suite = loader.loadTestsFromNames(['abc () //'], unittest)
         error, test = self.check_deferred_error(loader, list(suite)[0])
         expected = "module 'unittest' has no attribute 'abc () //'"
-        expected_regex = "module 'unittest' has no attribute 'abc \(\) //'"
+        expected_regex = r"module 'unittest' has no attribute 'abc \(\) //'"
         self.assertIn(
             expected, error,
             'missing error string in %r' % error)

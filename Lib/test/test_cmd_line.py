@@ -43,7 +43,7 @@ class CmdLineTest(unittest.TestCase):
 
     def test_version(self):
         version = ('Python %d.%d' % sys.version_info[:2]).encode("ascii")
-        for switch in '-V', '--version':
+        for switch in '-V', '--version', '-VV':
             rc, out, err = assert_python_ok(switch)
             self.assertFalse(err.startswith(version))
             self.assertTrue(out.startswith(version))
@@ -348,8 +348,9 @@ class CmdLineTest(unittest.TestCase):
             test.support.SuppressCrashReport().__enter__()
             sys.stdout.write('x')
             os.close(sys.stdout.fileno())"""
-        rc, out, err = assert_python_ok('-c', code)
+        rc, out, err = assert_python_failure('-c', code)
         self.assertEqual(b'', out)
+        self.assertEqual(120, rc)
         self.assertRegex(err.decode('ascii', 'ignore'),
                          'Exception ignored in.*\nOSError: .*')
 
@@ -403,12 +404,24 @@ class CmdLineTest(unittest.TestCase):
         # Verify that -R enables hash randomization:
         self.verify_valid_flag('-R')
         hashes = []
-        for i in range(2):
+        if os.environ.get('PYTHONHASHSEED', 'random') != 'random':
+            env = dict(os.environ)  # copy
+            # We need to test that it is enabled by default without
+            # the environment variable enabling it for us.
+            del env['PYTHONHASHSEED']
+            env['__cleanenv'] = '1'  # consumed by assert_python_ok()
+        else:
+            env = {}
+        for i in range(3):
             code = 'print(hash("spam"))'
-            rc, out, err = assert_python_ok('-c', code)
+            rc, out, err = assert_python_ok('-c', code, **env)
             self.assertEqual(rc, 0)
             hashes.append(out)
-        self.assertNotEqual(hashes[0], hashes[1])
+        hashes = sorted(set(hashes))  # uniq
+        # Rare chance of failure due to 3 random seeds honestly being equal.
+        self.assertGreater(len(hashes), 1,
+                           msg='3 runs produced an identical random hash '
+                               ' for "spam": {}'.format(hashes))
 
         # Verify that sys.flags contains hash_randomization
         code = 'import sys; print("random is", sys.flags.hash_randomization)'
@@ -453,7 +466,7 @@ class CmdLineTest(unittest.TestCase):
         rc, out, err = assert_python_ok('-I', '-c',
             'from sys import flags as f; '
             'print(f.no_user_site, f.ignore_environment, f.isolated)',
-            # dummyvar to prevent extranous -E
+            # dummyvar to prevent extraneous -E
             dummyvar="")
         self.assertEqual(out.strip(), b'1 1 1')
         with test.support.temp_cwd() as tmpdir:

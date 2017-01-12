@@ -2,7 +2,9 @@ from contextlib import contextmanager
 import linecache
 import os
 from io import StringIO
+import re
 import sys
+import textwrap
 import unittest
 from test import support
 from test.support.script_helper import assert_python_ok, assert_python_failure
@@ -104,7 +106,15 @@ class FilterTests(BaseTest):
             message = "FilterTests.test_ignore_after_default"
             def f():
                 self.module.warn(message, UserWarning)
-            f()
+
+            with support.captured_stderr() as stderr:
+                f()
+            stderr = stderr.getvalue()
+            self.assertIn("UserWarning: FilterTests.test_ignore_after_default",
+                          stderr)
+            self.assertIn("self.module.warn(message, UserWarning)",
+                          stderr)
+
             self.module.filterwarnings("error", category=UserWarning)
             self.assertRaises(UserWarning, f)
 
@@ -253,6 +263,18 @@ class FilterTests(BaseTest):
             self.assertEqual(str(w[-1].message), text)
             self.assertTrue(w[-1].category is UserWarning)
 
+    def test_message_matching(self):
+        with original_warnings.catch_warnings(record=True,
+                module=self.module) as w:
+            self.module.simplefilter("ignore", UserWarning)
+            self.module.filterwarnings("error", "match", UserWarning)
+            self.assertRaises(UserWarning, self.module.warn, "match")
+            self.assertRaises(UserWarning, self.module.warn, "match prefix")
+            self.module.warn("suffix match")
+            self.assertEqual(w, [])
+            self.module.warn("something completely different")
+            self.assertEqual(w, [])
+
     def test_mutate_filter_list(self):
         class X:
             def match(self, a):
@@ -264,6 +286,53 @@ class FilterTests(BaseTest):
             self.module.filters = L
             self.module.warn_explicit(UserWarning("b"), None, "f.py", 42)
             self.assertEqual(str(w[-1].message), "b")
+
+    def test_filterwarnings_duplicate_filters(self):
+        with original_warnings.catch_warnings(module=self.module):
+            self.module.resetwarnings()
+            self.module.filterwarnings("error", category=UserWarning)
+            self.assertEqual(len(self.module.filters), 1)
+            self.module.filterwarnings("ignore", category=UserWarning)
+            self.module.filterwarnings("error", category=UserWarning)
+            self.assertEqual(
+                len(self.module.filters), 2,
+                "filterwarnings inserted duplicate filter"
+            )
+            self.assertEqual(
+                self.module.filters[0][0], "error",
+                "filterwarnings did not promote filter to "
+                "the beginning of list"
+            )
+
+    def test_simplefilter_duplicate_filters(self):
+        with original_warnings.catch_warnings(module=self.module):
+            self.module.resetwarnings()
+            self.module.simplefilter("error", category=UserWarning)
+            self.assertEqual(len(self.module.filters), 1)
+            self.module.simplefilter("ignore", category=UserWarning)
+            self.module.simplefilter("error", category=UserWarning)
+            self.assertEqual(
+                len(self.module.filters), 2,
+                "simplefilter inserted duplicate filter"
+            )
+            self.assertEqual(
+                self.module.filters[0][0], "error",
+                "simplefilter did not promote filter to the beginning of list"
+            )
+    def test_append_duplicate(self):
+        with original_warnings.catch_warnings(module=self.module,
+                record=True) as w:
+            self.module.resetwarnings()
+            self.module.simplefilter("ignore")
+            self.module.simplefilter("error", append=True)
+            self.module.simplefilter("ignore", append=True)
+            self.module.warn("test_append_duplicate", category=UserWarning)
+            self.assertEqual(len(self.module.filters), 2,
+                "simplefilter inserted duplicate filter"
+            )
+            self.assertEqual(len(w), 0,
+                "appended duplicate changed order of filters"
+            )
 
 class CFilterTests(FilterTests, unittest.TestCase):
     module = c_warnings
@@ -534,6 +603,14 @@ class WCmdLineTests(BaseTest):
             self.module._setoption('error::Warning::0')
             self.assertRaises(UserWarning, self.module.warn, 'convert to error')
 
+
+class CWCmdLineTests(WCmdLineTests, unittest.TestCase):
+    module = c_warnings
+
+
+class PyWCmdLineTests(WCmdLineTests, unittest.TestCase):
+    module = py_warnings
+
     def test_improper_option(self):
         # Same as above, but check that the message is printed out when
         # the interpreter is executed. This also checks that options are
@@ -549,12 +626,6 @@ class WCmdLineTests(BaseTest):
         # '-Wi' was observed
         self.assertFalse(out.strip())
         self.assertNotIn(b'RuntimeWarning', err)
-
-class CWCmdLineTests(WCmdLineTests, unittest.TestCase):
-    module = c_warnings
-
-class PyWCmdLineTests(WCmdLineTests, unittest.TestCase):
-    module = py_warnings
 
 
 class _WarningsTests(BaseTest, unittest.TestCase):
@@ -646,6 +717,17 @@ class _WarningsTests(BaseTest, unittest.TestCase):
         with original_warnings.catch_warnings(module=self.module):
             self.module.filterwarnings("always", category=UserWarning)
             del self.module.showwarning
+            with support.captured_output('stderr') as stream:
+                self.module.warn(text)
+                result = stream.getvalue()
+        self.assertIn(text, result)
+
+    def test_showwarnmsg_missing(self):
+        # Test that _showwarnmsg() missing is okay.
+        text = 'del _showwarnmsg test'
+        with original_warnings.catch_warnings(module=self.module):
+            self.module.filterwarnings("always", category=UserWarning)
+            del self.module._showwarnmsg
             with support.captured_output('stderr') as stream:
                 self.module.warn(text)
                 result = stream.getvalue()
@@ -752,11 +834,43 @@ class WarningsDisplayTests(BaseTest):
                                 file_object, expected_file_line)
         self.assertEqual(expect, file_object.getvalue())
 
+
 class CWarningsDisplayTests(WarningsDisplayTests, unittest.TestCase):
     module = c_warnings
 
 class PyWarningsDisplayTests(WarningsDisplayTests, unittest.TestCase):
     module = py_warnings
+
+    def test_tracemalloc(self):
+        self.addCleanup(support.unlink, support.TESTFN)
+
+        with open(support.TESTFN, 'w') as fp:
+            fp.write(textwrap.dedent("""
+                def func():
+                    f = open(__file__)
+                    # Emit ResourceWarning
+                    f = None
+
+                func()
+            """))
+
+        res = assert_python_ok('-Wd', '-X', 'tracemalloc=2', support.TESTFN)
+
+        stderr = res.err.decode('ascii', 'replace')
+        # normalize newlines
+        stderr = '\n'.join(stderr.splitlines())
+        stderr = re.sub('<.*>', '<...>', stderr)
+        expected = textwrap.dedent('''
+            {fname}:5: ResourceWarning: unclosed file <...>
+              f = None
+            Object allocated at (most recent call first):
+              File "{fname}", lineno 3
+                f = open(__file__)
+              File "{fname}", lineno 7
+                func()
+        ''')
+        expected = expected.format(fname=support.TESTFN).strip()
+        self.assertEqual(stderr, expected)
 
 
 class CatchWarningTests(BaseTest):
@@ -829,6 +943,51 @@ class CatchWarningTests(BaseTest):
                 self.assertTrue(wmod.showwarning is orig_showwarning)
                 self.assertTrue(wmod.filters is not orig_filters)
             self.assertTrue(wmod.filters is orig_filters)
+
+    def test_record_override_showwarning_before(self):
+        # Issue #28835: If warnings.showwarning() was overriden, make sure
+        # that catch_warnings(record=True) overrides it again.
+        text = "This is a warning"
+        wmod = self.module
+        my_log = []
+
+        def my_logger(message, category, filename, lineno, file=None, line=None):
+            nonlocal my_log
+            my_log.append(message)
+
+        # Override warnings.showwarning() before calling catch_warnings()
+        with support.swap_attr(wmod, 'showwarning', my_logger):
+            with wmod.catch_warnings(module=wmod, record=True) as log:
+                self.assertIsNot(wmod.showwarning, my_logger)
+
+                wmod.simplefilter("always")
+                wmod.warn(text)
+
+            self.assertIs(wmod.showwarning, my_logger)
+
+        self.assertEqual(len(log), 1, log)
+        self.assertEqual(log[0].message.args[0], text)
+        self.assertEqual(my_log, [])
+
+    def test_record_override_showwarning_inside(self):
+        # Issue #28835: It is possible to override warnings.showwarning()
+        # in the catch_warnings(record=True) context manager.
+        text = "This is a warning"
+        wmod = self.module
+        my_log = []
+
+        def my_logger(message, category, filename, lineno, file=None, line=None):
+            nonlocal my_log
+            my_log.append(message)
+
+        with wmod.catch_warnings(module=wmod, record=True) as log:
+            wmod.simplefilter("always")
+            wmod.showwarning = my_logger
+            wmod.warn(text)
+
+        self.assertEqual(len(my_log), 1, my_log)
+        self.assertEqual(my_log[0].args[0], text)
+        self.assertEqual(log, [])
 
     def test_check_warnings(self):
         # Explicit tests for the test.support convenience wrapper
@@ -931,7 +1090,9 @@ class BootstrapTest(unittest.TestCase):
             # Use -W to load warnings module at startup
             assert_python_ok('-c', 'pass', '-W', 'always', PYTHONPATH=cwd)
 
+
 class FinalizationTest(unittest.TestCase):
+    @support.requires_type_collecting
     def test_finalization(self):
         # Issue #19421: warnings.warn() should not crash
         # during Python finalization
@@ -949,6 +1110,23 @@ a=A()
         # note: "__main__" filename is not correct, it should be the name
         # of the script
         self.assertEqual(err, b'__main__:7: UserWarning: test')
+
+    def test_late_resource_warning(self):
+        # Issue #21925: Emitting a ResourceWarning late during the Python
+        # shutdown must be logged.
+
+        expected = b"sys:1: ResourceWarning: unclosed file "
+
+        # don't import the warnings module
+        # (_warnings will try to import it)
+        code = "f = open(%a)" % __file__
+        rc, out, err = assert_python_ok("-Wd", "-c", code)
+        self.assertTrue(err.startswith(expected), ascii(err))
+
+        # import the warnings module
+        code = "import warnings; f = open(%a)" % __file__
+        rc, out, err = assert_python_ok("-Wd", "-c", code)
+        self.assertTrue(err.startswith(expected), ascii(err))
 
 
 def setUpModule():

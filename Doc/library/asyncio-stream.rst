@@ -2,30 +2,30 @@
 
 .. _asyncio-streams:
 
-++++++++++++++++++++++++
-Streams (high-level API)
-++++++++++++++++++++++++
++++++++++++++++++++++++++++++
+Streams (coroutine based API)
++++++++++++++++++++++++++++++
 
 Stream functions
 ================
 
 .. note::
 
-   The top-level functions in this module are meant convenience wrappers
+   The top-level functions in this module are meant as convenience wrappers
    only; there's really nothing special there, and if they don't do
    exactly what you want, feel free to copy their code.
 
 
 .. coroutinefunction:: open_connection(host=None, port=None, \*, loop=None, limit=None, \*\*kwds)
 
-   A wrapper for :meth:`~BaseEventLoop.create_connection()` returning a (reader,
+   A wrapper for :meth:`~AbstractEventLoop.create_connection()` returning a (reader,
    writer) pair.
 
    The reader returned is a :class:`StreamReader` instance; the writer is
    a :class:`StreamWriter` instance.
 
    The arguments are all the usual arguments to
-   :meth:`BaseEventLoop.create_connection` except *protocol_factory*; most
+   :meth:`AbstractEventLoop.create_connection` except *protocol_factory*; most
    common are positional host and port, with various optional keyword arguments
    following.
 
@@ -38,7 +38,7 @@ Stream functions
 .. coroutinefunction:: start_server(client_connected_cb, host=None, port=None, \*, loop=None, limit=None, \*\*kwds)
 
    Start a socket server, with a callback for each client connected. The return
-   value is the same as :meth:`~BaseEventLoop.create_server()`.
+   value is the same as :meth:`~AbstractEventLoop.create_server()`.
 
    The *client_connected_cb* parameter is called with two parameters:
    *client_reader*, *client_writer*.  *client_reader* is a
@@ -49,7 +49,7 @@ Stream functions
    converted into a :class:`Task`.
 
    The rest of the arguments are all the usual arguments to
-   :meth:`~BaseEventLoop.create_server()` except *protocol_factory*; most
+   :meth:`~AbstractEventLoop.create_server()` except *protocol_factory*; most
    common are positional *host* and *port*, with various optional keyword
    arguments following.
 
@@ -61,7 +61,7 @@ Stream functions
 
 .. coroutinefunction:: open_unix_connection(path=None, \*, loop=None, limit=None, **kwds)
 
-   A wrapper for :meth:`~BaseEventLoop.create_unix_connection()` returning
+   A wrapper for :meth:`~AbstractEventLoop.create_unix_connection()` returning
    a (reader, writer) pair.
 
    See :func:`open_connection` for information about return value and other
@@ -141,6 +141,30 @@ StreamReader
       the partial read bytes.
 
       This method is a :ref:`coroutine <coroutine>`.
+
+   .. coroutinemethod:: readuntil(separator=b'\\n')
+
+      Read data from the stream until ``separator`` is found.
+
+      On success, the data and separator will be removed from the
+      internal buffer (consumed). Returned data will include the
+      separator at the end.
+
+      Configured stream limit is used to check result. Limit sets the
+      maximal length of data that can be returned, not counting the
+      separator.
+
+      If an EOF occurs and the complete separator is still not found,
+      an :exc:`IncompleteReadError` exception will be
+      raised, and the internal buffer will be reset.  The
+      :attr:`IncompleteReadError.partial` attribute may contain the
+      separator partially.
+
+      If the data cannot be read because of over limit, a
+      :exc:`LimitOverrunError` exception  will be raised, and the data
+      will be left in the internal buffer, so it can be read again.
+
+      .. versionadded:: 3.5.2
 
    .. method:: at_eof()
 
@@ -223,7 +247,7 @@ StreamReaderProtocol
 .. class:: StreamReaderProtocol(stream_reader, client_connected_cb=None, loop=None)
 
     Trivial helper class to adapt between :class:`Protocol` and
-    :class:`StreamReader`. Sublclass of :class:`Protocol`.
+    :class:`StreamReader`. Subclass of :class:`Protocol`.
 
     *stream_reader* is a :class:`StreamReader` instance, *client_connected_cb*
     is an optional function called with (stream_reader, stream_writer) when a
@@ -249,6 +273,18 @@ IncompleteReadError
    .. attribute:: partial
 
       Read bytes string before the end of stream was reached (:class:`bytes`).
+
+
+LimitOverrunError
+=================
+
+.. exception:: LimitOverrunError
+
+   Reached the buffer limit while looking for a separator.
+
+   .. attribute:: consumed
+
+      Total number of to be consumed bytes.
 
 
 Stream examples
@@ -285,7 +321,7 @@ TCP echo client using the :func:`asyncio.open_connection` function::
 .. seealso::
 
    The :ref:`TCP echo client protocol <asyncio-tcp-echo-client-protocol>`
-   example uses the :meth:`BaseEventLoop.create_connection` method.
+   example uses the :meth:`AbstractEventLoop.create_connection` method.
 
 
 .. _asyncio-tcp-echo-server-streams:
@@ -330,7 +366,7 @@ TCP echo server using the :func:`asyncio.start_server` function::
 .. seealso::
 
    The :ref:`TCP echo server protocol <asyncio-tcp-echo-server-protocol>`
-   example uses the :meth:`BaseEventLoop.create_server` method.
+   example uses the :meth:`AbstractEventLoop.create_server` method.
 
 
 Get HTTP headers
@@ -422,10 +458,10 @@ Coroutine waiting until a socket receives data using the
 
    The :ref:`register an open socket to wait for data using a protocol
    <asyncio-register-socket>` example uses a low-level protocol created by the
-   :meth:`BaseEventLoop.create_connection` method.
+   :meth:`AbstractEventLoop.create_connection` method.
 
    The :ref:`watch a file descriptor for read events
    <asyncio-watch-read-event>` example uses the low-level
-   :meth:`BaseEventLoop.add_reader` method to register the file descriptor of a
+   :meth:`AbstractEventLoop.add_reader` method to register the file descriptor of a
    socket.
 

@@ -42,7 +42,7 @@ Executor Objects
 
        Equivalent to :func:`map(func, *iterables) <map>` except *func* is executed
        asynchronously and several calls to *func* may be made concurrently.  The
-       returned iterator raises a :exc:`TimeoutError` if
+       returned iterator raises a :exc:`concurrent.futures.TimeoutError` if
        :meth:`~iterator.__next__` is called and the result isn't available
        after *timeout* seconds from the original call to :meth:`Executor.map`.
        *timeout* can be an int or a float.  If *timeout* is not specified or
@@ -99,12 +99,12 @@ the results of another :class:`Future`.  For example::
    import time
    def wait_on_b():
        time.sleep(5)
-       print(b.result()) # b will never complete because it is waiting on a.
+       print(b.result())  # b will never complete because it is waiting on a.
        return 5
 
    def wait_on_a():
        time.sleep(5)
-       print(a.result()) # a will never complete because it is waiting on b.
+       print(a.result())  # a will never complete because it is waiting on b.
        return 6
 
 
@@ -124,7 +124,7 @@ And::
    executor.submit(wait_on_future)
 
 
-.. class:: ThreadPoolExecutor(max_workers=None)
+.. class:: ThreadPoolExecutor(max_workers=None, thread_name_prefix='')
 
    An :class:`Executor` subclass that uses a pool of at most *max_workers*
    threads to execute calls asynchronously.
@@ -137,6 +137,10 @@ And::
       should be higher than the number of workers
       for :class:`ProcessPoolExecutor`.
 
+   .. versionadded:: 3.6
+      The *thread_name_prefix* argument was added to allow users to
+      control the threading.Thread names for worker threads created by
+      the pool for easier debugging.
 
 .. _threadpoolexecutor-example:
 
@@ -153,7 +157,7 @@ ThreadPoolExecutor Example
            'http://www.bbc.co.uk/',
            'http://some-made-up-domain.com/']
 
-   # Retrieve a single page and report the url and contents
+   # Retrieve a single page and report the URL and contents
    def load_url(url, timeout):
        with urllib.request.urlopen(url, timeout=timeout) as conn:
            return conn.read()
@@ -274,11 +278,12 @@ The :class:`Future` class encapsulates the asynchronous execution of a callable.
 
        Return the value returned by the call. If the call hasn't yet completed
        then this method will wait up to *timeout* seconds.  If the call hasn't
-       completed in *timeout* seconds, then a :exc:`TimeoutError` will be
-       raised. *timeout* can be an int or float.  If *timeout* is not specified
-       or ``None``, there is no limit to the wait time.
+       completed in *timeout* seconds, then a
+       :exc:`concurrent.futures.TimeoutError` will be raised. *timeout* can be
+       an int or float.  If *timeout* is not specified or ``None``, there is no
+       limit to the wait time.
 
-       If the future is cancelled before completing then :exc:`CancelledError`
+       If the future is cancelled before completing then :exc:`.CancelledError`
        will be raised.
 
        If the call raised, this method will raise the same exception.
@@ -287,11 +292,12 @@ The :class:`Future` class encapsulates the asynchronous execution of a callable.
 
        Return the exception raised by the call.  If the call hasn't yet
        completed then this method will wait up to *timeout* seconds.  If the
-       call hasn't completed in *timeout* seconds, then a :exc:`TimeoutError`
-       will be raised.  *timeout* can be an int or float.  If *timeout* is not
-       specified or ``None``, there is no limit to the wait time.
+       call hasn't completed in *timeout* seconds, then a
+       :exc:`concurrent.futures.TimeoutError` will be raised.  *timeout* can be
+       an int or float.  If *timeout* is not specified or ``None``, there is no
+       limit to the wait time.
 
-       If the future is cancelled before completing then :exc:`CancelledError`
+       If the future is cancelled before completing then :exc:`.CancelledError`
        will be raised.
 
        If the call completed without raising, ``None`` is returned.
@@ -391,13 +397,12 @@ Module Functions
    Returns an iterator over the :class:`Future` instances (possibly created by
    different :class:`Executor` instances) given by *fs* that yields futures as
    they complete (finished or were cancelled). Any futures given by *fs* that
-   are duplicated will be returned once. Any futures that completed
-   before :func:`as_completed` is called will be yielded first.  The returned
-   iterator raises a :exc:`TimeoutError` if :meth:`~iterator.__next__` is
-   called and the result isn't available after *timeout* seconds from the
-   original call to :func:`as_completed`.  *timeout* can be an int or float.
-   If *timeout* is not specified or ``None``, there is no limit to the wait
-   time.
+   are duplicated will be returned once. Any futures that completed before
+   :func:`as_completed` is called will be yielded first.  The returned iterator
+   raises a :exc:`concurrent.futures.TimeoutError` if :meth:`~iterator.__next__`
+   is called and the result isn't available after *timeout* seconds from the
+   original call to :func:`as_completed`.  *timeout* can be an int or float. If
+   *timeout* is not specified or ``None``, there is no limit to the wait time.
 
 
 .. seealso::
@@ -409,6 +414,16 @@ Module Functions
 
 Exception classes
 -----------------
+
+.. currentmodule:: concurrent.futures
+
+.. exception:: CancelledError
+
+   Raised when a future is cancelled.
+
+.. exception:: TimeoutError
+
+   Raised when a future operation exceeds the given timeout.
 
 .. currentmodule:: concurrent.futures.process
 

@@ -460,6 +460,8 @@ itemgetter_call(itemgetterobject *ig, PyObject *args, PyObject *kw)
     PyObject *obj, *result;
     Py_ssize_t i, nitems=ig->nitems;
 
+    if (kw != NULL && !_PyArg_NoKeywords("itemgetter", kw))
+        return NULL;
     if (!PyArg_UnpackTuple(args, "itemgetter", 1, 1, &obj))
         return NULL;
     if (nitems == 1)
@@ -747,6 +749,8 @@ attrgetter_call(attrgetterobject *ag, PyObject *args, PyObject *kw)
     PyObject *obj, *result;
     Py_ssize_t i, nattrs=ag->nattrs;
 
+    if (kw != NULL && !_PyArg_NoKeywords("attrgetter", kw))
+        return NULL;
     if (!PyArg_UnpackTuple(args, "attrgetter", 1, 1, &obj))
         return NULL;
     if (ag->nattrs == 1) /* ag->attr is always a tuple */
@@ -927,7 +931,7 @@ static PyObject *
 methodcaller_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     methodcallerobject *mc;
-    PyObject *name, *newargs;
+    PyObject *name;
 
     if (PyTuple_GET_SIZE(args) < 1) {
         PyErr_SetString(PyExc_TypeError, "methodcaller needs at least "
@@ -947,19 +951,19 @@ methodcaller_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (mc == NULL)
         return NULL;
 
-    newargs = PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
-    if (newargs == NULL) {
-        Py_DECREF(mc);
-        return NULL;
-    }
-    mc->args = newargs;
-
+    name = PyTuple_GET_ITEM(args, 0);
     Py_INCREF(name);
     PyUnicode_InternInPlace(&name);
     mc->name = name;
 
     Py_XINCREF(kwds);
     mc->kwds = kwds;
+
+    mc->args = PyTuple_GetSlice(args, 1, PyTuple_GET_SIZE(args));
+    if (mc->args == NULL) {
+        Py_DECREF(mc);
+        return NULL;
+    }
 
     PyObject_GC_Track(mc);
     return (PyObject *)mc;
@@ -988,6 +992,8 @@ methodcaller_call(methodcallerobject *mc, PyObject *args, PyObject *kw)
 {
     PyObject *method, *obj, *result;
 
+    if (kw != NULL && !_PyArg_NoKeywords("methodcaller", kw))
+        return NULL;
     if (!PyArg_UnpackTuple(args, "methodcaller", 1, 1, &obj))
         return NULL;
     method = PyObject_GetAttr(obj, mc->name);
@@ -1105,6 +1111,8 @@ methodcaller_reduce(methodcallerobject *mc)
         PyObject *functools;
         PyObject *partial;
         PyObject *constructor;
+        PyObject *newargs[2];
+
         _Py_IDENTIFIER(partial);
         functools = PyImport_ImportModule("functools");
         if (!functools)
@@ -1113,17 +1121,11 @@ methodcaller_reduce(methodcallerobject *mc)
         Py_DECREF(functools);
         if (!partial)
             return NULL;
-        newargs = PyTuple_New(2);
-        if (newargs == NULL) {
-            Py_DECREF(partial);
-            return NULL;
-        }
-        Py_INCREF(Py_TYPE(mc));
-        PyTuple_SET_ITEM(newargs, 0, (PyObject *)Py_TYPE(mc));
-        Py_INCREF(mc->name);
-        PyTuple_SET_ITEM(newargs, 1, mc->name);
-        constructor = PyObject_Call(partial, newargs, mc->kwds);
-        Py_DECREF(newargs);
+
+        newargs[0] = (PyObject *)Py_TYPE(mc);
+        newargs[1] = mc->name;
+        constructor = _PyObject_FastCallDict(partial, newargs, 2, mc->kwds);
+
         Py_DECREF(partial);
         return Py_BuildValue("NO", constructor, mc->args);
     }

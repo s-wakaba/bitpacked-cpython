@@ -3,6 +3,7 @@
 
 .. module:: csv
    :synopsis: Write and read tabular data to and from delimited files.
+
 .. sectionauthor:: Skip Montanaro <skip@pobox.com>
 
 **Source code:** :source:`Lib/csv.py`
@@ -10,6 +11,8 @@
 .. index::
    single: csv
    pair: data; tabular
+
+--------------
 
 The so-called CSV (Comma Separated Values) format is the most common import and
 export format for spreadsheets and databases.  CSV format was used for many
@@ -146,18 +149,25 @@ The :mod:`csv` module defines the following classes:
 .. class:: DictReader(csvfile, fieldnames=None, restkey=None, restval=None, \
                       dialect='excel', *args, **kwds)
 
-   Create an object which operates like a regular reader but maps the
-   information read into a dict whose keys are given by the optional
-   *fieldnames* parameter.  The *fieldnames* parameter is a :mod:`sequence
-   <collections.abc>` whose elements are associated with the fields of the
-   input data in order. These elements become the keys of the resulting
-   dictionary.  If the *fieldnames* parameter is omitted, the values in the
-   first row of the *csvfile* will be used as the fieldnames.  If the row read
-   has more fields than the fieldnames sequence, the remaining data is added as
-   a sequence keyed by the value of *restkey*.  If the row read has fewer
-   fields than the fieldnames sequence, the remaining keys take the value of
-   the optional *restval* parameter.  Any other optional or keyword arguments
-   are passed to the underlying :class:`reader` instance.
+   Create an object that operates like a regular reader but maps the
+   information in each row to an :mod:`OrderedDict <collections.OrderedDict>`
+   whose keys are given by the optional *fieldnames* parameter.
+
+   The *fieldnames* parameter is a :term:`sequence`.  If *fieldnames* is
+   omitted, the values in the first row of the *csvfile* will be used as the
+   fieldnames.  Regardless of how the fieldnames are determined, the ordered
+   dictionary preserves their original ordering.
+
+   If a row has more fields than fieldnames, the remaining data is put in a
+   list and stored with the fieldname specified by *restkey* (which defaults
+   to ``None``).  If a non-blank row has fewer fields than fieldnames, the
+   missing values are filled-in with ``None``.
+
+   All other optional or keyword arguments are passed to the underlying
+   :class:`reader` instance.
+
+   .. versionchanged:: 3.6
+      Returned rows are now of type :class:`OrderedDict`.
 
    A short usage example::
 
@@ -167,9 +177,11 @@ The :mod:`csv` module defines the following classes:
        ...     for row in reader:
        ...         print(row['first_name'], row['last_name'])
        ...
-       Baked Beans
-       Lovely Spam
-       Wonderful Spam
+       Eric Idle
+       John Cleese
+
+       >>> print(row)
+       OrderedDict([('first_name', 'John'), ('last_name', 'Cleese')])
 
 
 .. class:: DictWriter(csvfile, fieldnames, restval='', extrasaction='raise', \
@@ -183,10 +195,12 @@ The :mod:`csv` module defines the following classes:
    written if the dictionary is missing a key in *fieldnames*.  If the
    dictionary passed to the :meth:`writerow` method contains a key not found in
    *fieldnames*, the optional *extrasaction* parameter indicates what action to
-   take.  If it is set to ``'raise'`` a :exc:`ValueError` is raised.  If it is
-   set to ``'ignore'``, extra values in the dictionary are ignored.  Any other
-   optional or keyword arguments are passed to the underlying :class:`writer`
-   instance.
+   take.
+   If it is set to ``'raise'``, the default value, a :exc:`ValueError`
+   is raised.
+   If it is set to ``'ignore'``, extra values in the dictionary are ignored.
+   Any other optional or keyword arguments are passed to the underlying
+   :class:`writer` instance.
 
    Note that unlike the :class:`DictReader` class, the *fieldnames* parameter
    of the :class:`DictWriter` is not optional.  Since Python's :class:`dict`

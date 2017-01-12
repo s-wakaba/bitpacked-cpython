@@ -4,9 +4,11 @@
 .. module:: resource
    :platform: Unix
    :synopsis: An interface to provide resource usage information on the current process.
+
 .. moduleauthor:: Jeremy Hylton <jeremy@alum.mit.edu>
 .. sectionauthor:: Jeremy Hylton <jeremy@alum.mit.edu>
 
+--------------
 
 This module provides basic mechanisms for measuring and controlling system
 resources utilized by a program.
@@ -123,8 +125,7 @@ platform.
 
 .. data:: RLIMIT_FSIZE
 
-   The maximum size of a file which the process may create.  This only affects the
-   stack of the main thread in a multi-threaded process.
+   The maximum size of a file which the process may create.
 
 
 .. data:: RLIMIT_DATA
@@ -134,7 +135,8 @@ platform.
 
 .. data:: RLIMIT_STACK
 
-   The maximum size (in bytes) of the call stack for the current process.
+   The maximum size (in bytes) of the call stack for the current process.  This only
+   affects the stack of the main thread in a multi-threaded process.
 
 
 .. data:: RLIMIT_RSS

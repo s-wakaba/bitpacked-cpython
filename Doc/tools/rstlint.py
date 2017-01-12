@@ -9,8 +9,6 @@
 # TODO: - wrong versions in versionadded/changed
 #       - wrong markup after versionchanged directive
 
-from __future__ import with_statement
-
 import os
 import re
 import sys
@@ -43,7 +41,7 @@ directives = [
 ]
 
 all_directives = '(' + '|'.join(directives) + ')'
-seems_directive_re = re.compile(r'\.\. %s([^a-z:]|:(?!:))' % all_directives)
+seems_directive_re = re.compile(r'(?<!\.)\.\. %s([^a-z:]|:(?!:))' % all_directives)
 default_role_re = re.compile(r'(^| )`\w([^`]*?\w)?`($| )')
 leaked_markup_re = re.compile(r'[a-z]::\s|`|\.\.\s*\w+:')
 
@@ -83,7 +81,7 @@ def check_suspicious_constructs(fn, lines):
     """Check for suspicious reST constructs."""
     inprod = False
     for lno, line in enumerate(lines):
-        if seems_directive_re.match(line):
+        if seems_directive_re.search(line):
             yield lno+1, 'comment seems to be intended as a directive'
         if '.. productionlist::' in line:
             inprod = True

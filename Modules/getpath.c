@@ -101,25 +101,8 @@
 #endif
 
 
-#ifndef VERSION
-#define VERSION "2.1"
-#endif
-
-#ifndef VPATH
-#define VPATH "."
-#endif
-
-#ifndef PREFIX
-#  define PREFIX "/usr/local"
-#endif
-
-#ifndef EXEC_PREFIX
-#define EXEC_PREFIX PREFIX
-#endif
-
-#ifndef PYTHONPATH
-#define PYTHONPATH PREFIX "/lib/python" VERSION ":" \
-              EXEC_PREFIX "/lib/python" VERSION "/lib-dynload"
+#if !defined(PREFIX) || !defined(EXEC_PREFIX) || !defined(VERSION) || !defined(VPATH)
+#error "PREFIX, EXEC_PREFIX, VERSION, and VPATH must be constant defined"
 #endif
 
 #ifndef LANDMARK
@@ -477,8 +460,8 @@ calculate_path(void)
 {
     extern wchar_t *Py_GetProgramName(void);
 
-    static wchar_t delimiter[2] = {DELIM, '\0'};
-    static wchar_t separator[2] = {SEP, '\0'};
+    static const wchar_t delimiter[2] = {DELIM, '\0'};
+    static const wchar_t separator[2] = {SEP, '\0'};
     char *_rtpypath = Py_GETENV("PYTHONPATH"); /* XXX use wide version on Windows */
     wchar_t *rtpypath = NULL;
     wchar_t *home = Py_GetPythonHome();
@@ -779,7 +762,10 @@ calculate_path(void)
 
         if (defpath[0] != SEP) {
             wcscat(buf, prefix);
-            wcscat(buf, separator);
+            if (prefixsz >= 2 && prefix[prefixsz - 2] != SEP &&
+                defpath[0] != (delim ? DELIM : L'\0')) {  /* not empty */
+                wcscat(buf, separator);
+            }
         }
 
         if (delim) {

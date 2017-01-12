@@ -11,10 +11,6 @@
 #include "pch.h"
 
 static const LPCWSTR PYBA_WINDOW_CLASS = L"PythonBA";
-static const LPCWSTR PYBA_VARIABLE_LAUNCH_TARGET_PATH = L"LaunchTarget";
-static const LPCWSTR PYBA_VARIABLE_LAUNCH_TARGET_ELEVATED_ID = L"LaunchTargetElevatedId";
-static const LPCWSTR PYBA_VARIABLE_LAUNCH_ARGUMENTS = L"LaunchArguments";
-static const LPCWSTR PYBA_VARIABLE_LAUNCH_HIDDEN = L"LaunchHidden";
 static const DWORD PYBA_ACQUIRE_PERCENTAGE = 30;
 static const LPCWSTR PYBA_VARIABLE_BUNDLE_FILE_VERSION = L"WixBundleFileVersion";
 
@@ -94,6 +90,7 @@ enum CONTROL_ID {
     ID_CUSTOM_ASSOCIATE_FILES_CHECKBOX,
     ID_CUSTOM_INSTALL_ALL_USERS_CHECKBOX,
     ID_CUSTOM_INSTALL_LAUNCHER_ALL_USERS_CHECKBOX,
+    ID_CUSTOM_INCLUDE_LAUNCHER_HELP_LABEL,
     ID_CUSTOM_COMPILE_ALL_CHECKBOX,
     ID_CUSTOM_BROWSE_BUTTON,
     ID_CUSTOM_BROWSE_BUTTON_LABEL,
@@ -128,11 +125,11 @@ enum CONTROL_ID {
     ID_PROGRESS_CANCEL_BUTTON,
 
     // Success page
-    ID_LAUNCH_BUTTON,
     ID_SUCCESS_TEXT,
     ID_SUCCESS_RESTART_TEXT,
     ID_SUCCESS_RESTART_BUTTON,
     ID_SUCCESS_CANCEL_BUTTON,
+    ID_SUCCESS_MAX_PATH_BUTTON,
 
     // Failure page
     ID_FAILURE_LOGFILE_LINK,
@@ -158,6 +155,7 @@ static THEME_ASSIGN_CONTROL_ID CONTROL_ID_NAMES[] = {
     { ID_CUSTOM_ASSOCIATE_FILES_CHECKBOX, L"AssociateFiles" },
     { ID_CUSTOM_INSTALL_ALL_USERS_CHECKBOX, L"InstallAllUsers" },
     { ID_CUSTOM_INSTALL_LAUNCHER_ALL_USERS_CHECKBOX, L"CustomInstallLauncherAllUsers" },
+    { ID_CUSTOM_INCLUDE_LAUNCHER_HELP_LABEL, L"Include_launcherHelp" },
     { ID_CUSTOM_COMPILE_ALL_CHECKBOX, L"CompileAll" },
     { ID_CUSTOM_BROWSE_BUTTON, L"CustomBrowseButton" },
     { ID_CUSTOM_BROWSE_BUTTON_LABEL, L"CustomBrowseButtonLabel" },
@@ -186,11 +184,11 @@ static THEME_ASSIGN_CONTROL_ID CONTROL_ID_NAMES[] = {
     { ID_OVERALL_PROGRESS_TEXT, L"OverallProgressText" },
     { ID_PROGRESS_CANCEL_BUTTON, L"ProgressCancelButton" },
 
-    { ID_LAUNCH_BUTTON, L"LaunchButton" },
     { ID_SUCCESS_TEXT, L"SuccessText" },
     { ID_SUCCESS_RESTART_TEXT, L"SuccessRestartText" },
     { ID_SUCCESS_RESTART_BUTTON, L"SuccessRestartButton" },
     { ID_SUCCESS_CANCEL_BUTTON, L"SuccessCancelButton" },
+    { ID_SUCCESS_MAX_PATH_BUTTON, L"SuccessMaxPathButton" },
 
     { ID_FAILURE_LOGFILE_LINK, L"FailureLogFileLink" },
     { ID_FAILURE_MESSAGE_TEXT, L"FailureMessageText" },
@@ -325,6 +323,9 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
         case ID_CUSTOM_INSTALL_BUTTON:
             SavePageSettings();
 
+            hr = EnsureTargetDir();
+            ExitOnFailure(hr, L"Failed to set TargetDir");
+
             hr = BalGetStringVariable(L"TargetDir", &targetDir);
             if (SUCCEEDED(hr)) {
                 // TODO: Check whether directory exists and contains another installation
@@ -431,6 +432,11 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
         case ID_UNINSTALL_BUTTON:
             OnPlan(BOOTSTRAPPER_ACTION_UNINSTALL);
             break;
+
+        case ID_SUCCESS_MAX_PATH_BUTTON:
+            EnableMaxPathSupport();
+            ThemeControlEnable(_theme, ID_SUCCESS_MAX_PATH_BUTTON, FALSE);
+            break;
         }
 
     LExit:
@@ -454,6 +460,20 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
 
         ThemeSendControlMessage(_theme, ID_CUSTOM_INSTALL_LAUNCHER_ALL_USERS_CHECKBOX, BM_SETCHECK,
             installLauncherAllUsers ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        LOC_STRING *pLocString = nullptr;
+        LPCWSTR locKey = L"#(loc.Include_launcherHelp)";
+        LONGLONG detectedLauncher;
+
+        if (SUCCEEDED(BalGetNumericVariable(L"DetectedLauncher", &detectedLauncher)) && detectedLauncher) {
+            locKey = L"#(loc.Include_launcherRemove)";
+        } else if (SUCCEEDED(BalGetNumericVariable(L"DetectedOldLauncher", &detectedLauncher)) && detectedLauncher) {
+            locKey = L"#(loc.Include_launcherUpgrade)";
+        }
+
+        if (SUCCEEDED(LocGetString(_wixLoc, locKey, &pLocString)) && pLocString) {
+            ThemeSetTextControl(_theme, ID_CUSTOM_INCLUDE_LAUNCHER_HELP_LABEL, pLocString->wzText);
+        }
     }
 
     void Custom2Page_Show() {
@@ -514,9 +534,8 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
     }
 
     void SuccessPage_Show() {
-        // on the "Success" page, check if the restart or launch button should be enabled.
+        // on the "Success" page, check if the restart button should be enabled.
         BOOL showRestartButton = FALSE;
-        BOOL launchTargetExists = FALSE;
         LOC_STRING *successText = nullptr;
         HRESULT hr = S_OK;
         
@@ -524,8 +543,6 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
             if (BOOTSTRAPPER_RESTART_PROMPT == _command.restart) {
                 showRestartButton = TRUE;
             }
-        } else if (ThemeControlExists(_theme, ID_LAUNCH_BUTTON)) {
-            launchTargetExists = BalStringVariableExists(PYBA_VARIABLE_LAUNCH_TARGET_PATH);
         }
 
         switch (_plannedAction) {
@@ -552,9 +569,41 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
             }
         }
 
-        ThemeControlEnable(_theme, ID_LAUNCH_BUTTON, launchTargetExists && BOOTSTRAPPER_ACTION_UNINSTALL < _plannedAction);
         ThemeControlEnable(_theme, ID_SUCCESS_RESTART_TEXT, showRestartButton);
         ThemeControlEnable(_theme, ID_SUCCESS_RESTART_BUTTON, showRestartButton);
+
+        if (_command.action != BOOTSTRAPPER_ACTION_INSTALL ||
+            !IsWindowsVersionOrGreater(10, 0, 0)) {
+            ThemeControlEnable(_theme, ID_SUCCESS_MAX_PATH_BUTTON, FALSE);
+        } else {
+            DWORD dataType = 0, buffer = 0, bufferLen = sizeof(buffer);
+            HKEY hKey;
+            LRESULT res = RegOpenKeyExW(
+                HKEY_LOCAL_MACHINE,
+                L"SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+                0,
+                KEY_READ,
+                &hKey
+            );
+            if (res == ERROR_SUCCESS) {
+                res = RegQueryValueExW(hKey, L"LongPathsEnabled", nullptr, &dataType,
+                    (LPBYTE)&buffer, &bufferLen);
+                RegCloseKey(hKey);
+            }
+            else {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Failed to open SYSTEM\\CurrentControlSet\\Control\\FileSystem: error code %d", res);
+            }
+            if (res == ERROR_SUCCESS && dataType == REG_DWORD && buffer == 0) {
+                ThemeControlElevates(_theme, ID_SUCCESS_MAX_PATH_BUTTON, TRUE);
+            }
+            else {
+                if (res == ERROR_SUCCESS)
+                    BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Failed to read LongPathsEnabled value: error code %d", res);
+                else
+                    BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Hiding MAX_PATH button because it is already enabled");
+                ThemeControlEnable(_theme, ID_SUCCESS_MAX_PATH_BUTTON, FALSE);
+            }
+        }
     }
 
     void FailurePage_Show() {
@@ -607,6 +656,34 @@ class PythonBootstrapperApplication : public CBalBaseBootstrapperApplication {
         ThemeControlEnable(_theme, ID_FAILURE_RESTART_BUTTON, showRestartButton);
     }
 
+    static void EnableMaxPathSupport() {
+        LPWSTR targetDir = nullptr, defaultDir = nullptr;
+        HRESULT hr = BalGetStringVariable(L"TargetDir", &targetDir);
+        if (FAILED(hr) || !targetDir || !targetDir[0]) {
+            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Failed to get TargetDir");
+            return;
+        }
+
+        LPWSTR pythonw = nullptr;
+        StrAllocFormatted(&pythonw, L"%ls\\pythonw.exe", targetDir);
+        if (!pythonw || !pythonw[0]) {
+            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Failed to construct pythonw.exe path");
+            return;
+        }
+
+        LPCWSTR arguments = L"-c \"import winreg; "
+            "winreg.SetValueEx("
+                "winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, "
+                    "r'SYSTEM\\CurrentControlSet\\Control\\FileSystem'), "
+                "'LongPathsEnabled', "
+                "None, "
+                "winreg.REG_DWORD, "
+                "1"
+            ")\"";
+        BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Executing %ls %ls", pythonw, arguments);
+        HINSTANCE res = ShellExecuteW(0, L"runas", pythonw, arguments, NULL, SW_HIDE);
+        BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "return code 0x%08x", res);
+    }
 
 public: // IBootstrapperApplication
     virtual STDMETHODIMP OnStartup() {
@@ -641,6 +718,29 @@ public: // IBootstrapperApplication
         return nResult;
     }
 
+    virtual STDMETHODIMP_(int) OnDetectRelatedMsiPackage(
+        __in_z LPCWSTR wzPackageId,
+        __in_z LPCWSTR /*wzProductCode*/,
+        __in BOOL fPerMachine,
+        __in DWORD64 /*dw64Version*/,
+        __in BOOTSTRAPPER_RELATED_OPERATION operation
+    ) {
+        if (BOOTSTRAPPER_RELATED_OPERATION_MAJOR_UPGRADE == operation && 
+            (CSTR_EQUAL == ::CompareStringW(LOCALE_NEUTRAL, 0, wzPackageId, -1, L"launcher_AllUsers", -1) ||
+             CSTR_EQUAL == ::CompareStringW(LOCALE_NEUTRAL, 0, wzPackageId, -1, L"launcher_JustForMe", -1))) {
+            auto hr = LoadAssociateFilesStateFromKey(_engine, fPerMachine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER);
+            if (hr == S_OK) {
+                _engine->SetVariableNumeric(L"AssociateFiles", 1);
+            } else if (FAILED(hr)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Failed to load AssociateFiles state: error code 0x%08X", hr);
+            }
+
+            _engine->SetVariableNumeric(L"Include_launcher", 1);
+            _engine->SetVariableNumeric(L"DetectedOldLauncher", 1);
+            _engine->SetVariableNumeric(L"InstallLauncherAllUsers", fPerMachine ? 1 : 0);
+        }
+        return CheckCanceled() ? IDCANCEL : IDNOACTION;
+    }
 
     virtual STDMETHODIMP_(int) OnDetectRelatedBundle(
         __in LPCWSTR wzBundleId,
@@ -656,24 +756,8 @@ public: // IBootstrapperApplication
         if (BOOTSTRAPPER_RELATED_OPERATION_DOWNGRADE == operation) {
             _downgradingOtherVersion = TRUE;
         } else if (BOOTSTRAPPER_RELATED_OPERATION_MAJOR_UPGRADE == operation) {
-            _upgradingOldVersion = TRUE;
-
-            // Assume we don't want the launcher or file associations, and if
-            // they have already been installed then loading the state will
-            // reactivate these settings.
-            _engine->SetVariableNumeric(L"Include_launcher", 0);
-            _engine->SetVariableNumeric(L"AssociateFiles", 0);
-            auto hr = LoadLauncherStateFromKey(_engine, HKEY_CURRENT_USER);
-            if (hr == S_FALSE) {
-                hr = LoadLauncherStateFromKey(_engine, HKEY_LOCAL_MACHINE);
-            }
-            if (FAILED(hr)) {
-                BalLog(
-                    BOOTSTRAPPER_LOG_LEVEL_ERROR,
-                    "Failed to load launcher state: error code 0x%08X",
-                    hr
-                );
-            }
+            BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Detected previous version - planning upgrade");
+            _upgrading = TRUE;
 
             LoadOptionalFeatureStates(_engine);
         } else if (BOOTSTRAPPER_RELATED_OPERATION_NONE == operation) {
@@ -699,9 +783,42 @@ public: // IBootstrapperApplication
 
     virtual STDMETHODIMP_(void) OnDetectPackageComplete(
         __in LPCWSTR wzPackageId,
-        __in HRESULT /*hrStatus*/,
+        __in HRESULT hrStatus,
         __in BOOTSTRAPPER_PACKAGE_STATE state
-    ) { }
+    ) {
+        if (FAILED(hrStatus)) {
+            return;
+        }
+
+        BOOL detectedLauncher = FALSE;
+        HKEY hkey = HKEY_LOCAL_MACHINE;
+        if (CSTR_EQUAL == ::CompareStringW(LOCALE_NEUTRAL, 0, wzPackageId, -1, L"launcher_AllUsers", -1)) {
+            if (BOOTSTRAPPER_PACKAGE_STATE_PRESENT == state || BOOTSTRAPPER_PACKAGE_STATE_OBSOLETE == state) {
+                detectedLauncher = TRUE;
+                _engine->SetVariableNumeric(L"InstallLauncherAllUsers", 1);
+            }
+        } else if (CSTR_EQUAL == ::CompareStringW(LOCALE_NEUTRAL, 0, wzPackageId, -1, L"launcher_JustForMe", -1)) {
+            if (BOOTSTRAPPER_PACKAGE_STATE_PRESENT == state || BOOTSTRAPPER_PACKAGE_STATE_OBSOLETE == state) {
+                detectedLauncher = TRUE;
+                _engine->SetVariableNumeric(L"InstallLauncherAllUsers", 0);
+            }
+        }
+
+        if (detectedLauncher) {
+            /* When we detect the current version of the launcher. */
+            _engine->SetVariableNumeric(L"Include_launcher", 1);
+            _engine->SetVariableNumeric(L"DetectedLauncher", 1);
+            _engine->SetVariableString(L"Include_launcherState", L"disable");
+            _engine->SetVariableString(L"InstallLauncherAllUsersState", L"disable");
+
+            auto hr = LoadAssociateFilesStateFromKey(_engine, hkey);
+            if (hr == S_OK) {
+                _engine->SetVariableNumeric(L"AssociateFiles", 1);
+            } else if (FAILED(hr)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Failed to load AssociateFiles state: error code 0x%08X", hr);
+            }
+        }
+    }
 
 
     virtual STDMETHODIMP_(void) OnDetectComplete(__in HRESULT hrStatus) {
@@ -716,32 +833,7 @@ public: // IBootstrapperApplication
 
         if (SUCCEEDED(hrStatus)) {
             // Ensure the default path has been set
-            LONGLONG installAll;
-            LPWSTR targetDir = nullptr;
-            LPWSTR defaultTargetDir = nullptr;
-
-            hrStatus = BalGetStringVariable(L"TargetDir", &targetDir);
-            if (FAILED(hrStatus) || !targetDir || !targetDir[0]) {
-                ReleaseStr(targetDir);
-                targetDir = nullptr;
-
-                if (FAILED(BalGetNumericVariable(L"InstallAllUsers", &installAll))) {
-                    installAll = 0;
-                }
-
-                hrStatus = BalGetStringVariable(
-                    installAll ? L"DefaultAllUsersTargetDir" : L"DefaultJustForMeTargetDir",
-                    &defaultTargetDir
-                );
-
-                if (SUCCEEDED(hrStatus) && defaultTargetDir) {
-                    if (defaultTargetDir[0] && SUCCEEDED(BalFormatString(defaultTargetDir, &targetDir))) {
-                        hrStatus = _engine->SetVariableString(L"TargetDir", targetDir);
-                        ReleaseStr(targetDir);
-                    }
-                    ReleaseStr(defaultTargetDir);
-                }
-            }
+            hrStatus = EnsureTargetDir();
         }
 
         SetState(PYBA_STATE_DETECTED, hrStatus);
@@ -1182,12 +1274,6 @@ public: // IBootstrapperApplication
     }
 
     virtual STDMETHODIMP_(void) OnLaunchApprovedExeComplete(__in HRESULT hrStatus, __in DWORD /*processId*/) {
-        if (HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED) == hrStatus) {
-            //try with ShelExec next time
-            OnClickLaunchButton();
-        } else {
-            ::PostMessageW(_hWnd, WM_CLOSE, 0, 0);
-        }
     }
 
 
@@ -1396,8 +1482,13 @@ private:
 
         hr = LoadBootstrapperBAFunctions();
         BalExitOnFailure(hr, "Failed to load bootstrapper functions.");
+
         hr = UpdateUIStrings(_command.action);
         BalExitOnFailure(hr, "Failed to load UI strings.");
+
+        if (_command.action == BOOTSTRAPPER_ACTION_MODIFY) {
+            LoadOptionalFeatureStates(_engine);
+        }
 
         GetBundleFileVersion();
         // don't fail if we couldn't get the version info; best-effort only
@@ -1828,10 +1919,6 @@ private:
             switch (LOWORD(wParam)) {
             // Customize commands
             // Success/failure commands
-            case ID_LAUNCH_BUTTON:
-                pBA->OnClickLaunchButton();
-                return 0;
-
             case ID_SUCCESS_RESTART_BUTTON: __fallthrough;
             case ID_FAILURE_RESTART_BUTTON:
                 pBA->OnClickRestartButton();
@@ -1906,27 +1993,6 @@ private:
         for (DWORD i = 0; i < _theme->cControls; ++i) {
             THEME_CONTROL* pControl = _theme->rgControls + i;
             LPWSTR text = nullptr;
-            LPWSTR name = nullptr;
-            LOC_STRING *locText = nullptr;
-
-            // If a command link has a note, then add it.
-            if ((pControl->dwStyle & BS_TYPEMASK) == BS_COMMANDLINK ||
-                (pControl->dwStyle & BS_TYPEMASK) == BS_DEFCOMMANDLINK) {
-                hr = StrAllocFormatted(&name, L"#(loc.%lsNote)", pControl->sczName);
-                if (SUCCEEDED(hr)) {
-                    hr = LocGetString(_wixLoc, name, &locText);
-                    ReleaseStr(name);
-                    if (SUCCEEDED(hr) && locText && locText->wzText && locText->wzText[0]) {
-                        hr = BalFormatString(locText->wzText, &text);
-                        if (SUCCEEDED(hr) && text && text[0]) {
-                            ThemeSendControlMessage(_theme, pControl->wId, BCM_SETNOTE, 0, (LPARAM)text);
-                            ReleaseStr(text);
-                            text = nullptr;
-                        }
-                    }
-                }
-                hr = S_OK;
-            }
 
             if (!pControl->wPageId && pControl->sczText && *pControl->sczText) {
                 HRESULT hrFormat;
@@ -2048,6 +2114,7 @@ private:
 
         return;
     }
+
     HRESULT UpdateUIStrings(__in BOOTSTRAPPER_ACTION action) {
         HRESULT hr = S_OK;
         LPCWSTR likeInstalling = nullptr;
@@ -2270,6 +2337,30 @@ private:
                     StrFree(controlState);
                 }
                 StrFree(controlName);
+                controlName = nullptr;
+
+
+                // If a command link has a note, then add it.
+                if ((pControl->dwStyle & BS_TYPEMASK) == BS_COMMANDLINK ||
+                    (pControl->dwStyle & BS_TYPEMASK) == BS_DEFCOMMANDLINK) {
+                    hr = StrAllocFormatted(&controlName, L"#(loc.%lsNote)", pControl->sczName);
+                    if (SUCCEEDED(hr)) {
+                        LOC_STRING *locText = nullptr;
+                        hr = LocGetString(_wixLoc, controlName, &locText);
+                        if (SUCCEEDED(hr) && locText && locText->wzText && locText->wzText[0]) {
+                            LPWSTR text = nullptr;
+                            hr = BalFormatString(locText->wzText, &text);
+                            if (SUCCEEDED(hr) && text && text[0]) {
+                                ThemeSendControlMessage(_theme, pControl->wId, BCM_SETNOTE, 0, (LPARAM)text);
+                                ReleaseStr(text);
+                                text = nullptr;
+                            }
+                        }
+                        ReleaseStr(controlName);
+                        controlName = nullptr;
+                    }
+                    hr = S_OK;
+                }
             }
 
             ThemeControlEnable(_theme, pControl->wId, enableControl);
@@ -2328,69 +2419,6 @@ private:
         ::SendMessageW(_hWnd, WM_CLOSE, 0, 0);
     }
 
-
-    //
-    // OnClickLaunchButton - launch the app from the success page.
-    //
-    void OnClickLaunchButton() {
-        HRESULT hr = S_OK;
-        LPWSTR sczUnformattedLaunchTarget = nullptr;
-        LPWSTR sczLaunchTarget = nullptr;
-        LPWSTR sczLaunchTargetElevatedId = nullptr;
-        LPWSTR sczUnformattedArguments = nullptr;
-        LPWSTR sczArguments = nullptr;
-        int nCmdShow = SW_SHOWNORMAL;
-
-        hr = BalGetStringVariable(PYBA_VARIABLE_LAUNCH_TARGET_PATH, &sczUnformattedLaunchTarget);
-        BalExitOnFailure1(hr, "Failed to get launch target variable '%ls'.", PYBA_VARIABLE_LAUNCH_TARGET_PATH);
-
-        hr = BalFormatString(sczUnformattedLaunchTarget, &sczLaunchTarget);
-        BalExitOnFailure1(hr, "Failed to format launch target variable: %ls", sczUnformattedLaunchTarget);
-
-        if (BalStringVariableExists(PYBA_VARIABLE_LAUNCH_TARGET_ELEVATED_ID)) {
-            hr = BalGetStringVariable(PYBA_VARIABLE_LAUNCH_TARGET_ELEVATED_ID, &sczLaunchTargetElevatedId);
-            BalExitOnFailure1(hr, "Failed to get launch target elevated id '%ls'.", PYBA_VARIABLE_LAUNCH_TARGET_ELEVATED_ID);
-        }
-
-        if (BalStringVariableExists(PYBA_VARIABLE_LAUNCH_ARGUMENTS)) {
-            hr = BalGetStringVariable(PYBA_VARIABLE_LAUNCH_ARGUMENTS, &sczUnformattedArguments);
-            BalExitOnFailure1(hr, "Failed to get launch arguments '%ls'.", PYBA_VARIABLE_LAUNCH_ARGUMENTS);
-        }
-
-        if (BalStringVariableExists(PYBA_VARIABLE_LAUNCH_HIDDEN)) {
-            nCmdShow = SW_HIDE;
-        }
-
-        if (sczLaunchTargetElevatedId && !_triedToLaunchElevated) {
-            _triedToLaunchElevated = TRUE;
-            hr = _engine->LaunchApprovedExe(_hWnd, sczLaunchTargetElevatedId, sczUnformattedArguments, 0);
-            if (FAILED(hr)) {
-                BalLogError(hr, "Failed to launch elevated target: %ls", sczLaunchTargetElevatedId);
-
-                //try with ShelExec next time
-                OnClickLaunchButton();
-            }
-        } else {
-            if (sczUnformattedArguments) {
-                hr = BalFormatString(sczUnformattedArguments, &sczArguments);
-                BalExitOnFailure1(hr, "Failed to format launch arguments variable: %ls", sczUnformattedArguments);
-            }
-
-            hr = ShelExec(sczLaunchTarget, sczArguments, L"open", nullptr, nCmdShow, _hWnd, nullptr);
-            BalExitOnFailure1(hr, "Failed to launch target: %ls", sczLaunchTarget);
-
-            ::PostMessageW(_hWnd, WM_CLOSE, 0, 0);
-        }
-
-    LExit:
-        StrSecureZeroFreeString(sczArguments);
-        ReleaseStr(sczUnformattedArguments);
-        ReleaseStr(sczLaunchTargetElevatedId);
-        StrSecureZeroFreeString(sczLaunchTarget);
-        ReleaseStr(sczUnformattedLaunchTarget);
-
-        return;
-    }
 
 
     //
@@ -2515,9 +2543,8 @@ private:
                 if (_installPage == PAGE_LOADING) {
                     switch (_command.action) {
                     case BOOTSTRAPPER_ACTION_INSTALL:
-                        if (_upgradingOldVersion) {
+                        if (_upgrading) {
                             _installPage = PAGE_UPGRADE;
-                            _upgrading = TRUE;
                         } else if (SUCCEEDED(BalGetNumericVariable(L"SimpleInstall", &simple)) && simple) {
                             _installPage = PAGE_SIMPLE_INSTALL;
                         } else {
@@ -2560,11 +2587,9 @@ private:
         static BAL_CONDITION WILL_ELEVATE_CONDITION = {
             L"not WixBundleElevated and ("
                 /*Elevate when installing for all users*/
-                L"InstallAllUsers or"
+                L"InstallAllUsers or "
                 /*Elevate when installing the launcher for all users and it was not detected*/
-                L"(InstallLauncherAllUsers and Include_launcher and not DetectedLauncher) or"
-                /*Elevate when the launcher was installed for all users and it is being removed*/
-                L"(DetectedLauncher and DetectedLauncherAllUsers and not Include_launcher)"
+                L"(Include_launcher and InstallLauncherAllUsers and not DetectedLauncher)"
             L")",
             L""
         };
@@ -2867,19 +2892,16 @@ private:
         return HRESULT_FROM_WIN32(res);
     }
 
-    static HRESULT LoadLauncherStateFromKey(
+    static HRESULT LoadAssociateFilesStateFromKey(
         __in IBootstrapperEngine* pEngine,
         __in HKEY hkHive
     ) {
         const LPCWSTR subkey = L"Software\\Python\\PyLauncher";
         HKEY hKey;
         LRESULT res;
+        HRESULT hr;
 
-        if (IsTargetPlatformx64(pEngine)) {
-            res = RegOpenKeyExW(hkHive, subkey, 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
-        } else {
-            res = RegOpenKeyExW(hkHive, subkey, 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-        }
+        res = RegOpenKeyExW(hkHive, subkey, 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
 
         if (res == ERROR_FILE_NOT_FOUND) {
             return S_FALSE;
@@ -2888,26 +2910,17 @@ private:
             return HRESULT_FROM_WIN32(res);
         }
 
-        res = RegQueryValueExW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr);
-        if (res == ERROR_FILE_NOT_FOUND) {
-            pEngine->SetVariableNumeric(L"Include_launcher", 0);
-        } else if (res == ERROR_SUCCESS) {
-            pEngine->SetVariableNumeric(L"Include_launcher", 1);
-            pEngine->SetVariableNumeric(L"DetectedLauncher", 1);
-            pEngine->SetVariableNumeric(L"InstallLauncherAllUsers", (hkHive == HKEY_LOCAL_MACHINE) ? 1 : 0);
-            pEngine->SetVariableNumeric(L"DetectedLauncherAllUsers", (hkHive == HKEY_LOCAL_MACHINE) ? 1 : 0);
-            pEngine->SetVariableString(L"InstallLauncherAllUsersState", L"disable");
-        }
-
         res = RegQueryValueExW(hKey, L"AssociateFiles", nullptr, nullptr, nullptr, nullptr);
         if (res == ERROR_FILE_NOT_FOUND) {
-            pEngine->SetVariableNumeric(L"AssociateFiles", 0);
+            hr = S_FALSE;
         } else if (res == ERROR_SUCCESS) {
-            pEngine->SetVariableNumeric(L"AssociateFiles", 1);
+            hr = S_OK;
+        } else {
+            hr = HRESULT_FROM_WIN32(res);
         }
 
         RegCloseKey(hKey);
-        return S_OK;
+        return hr;
     }
 
     static void LoadOptionalFeatureStates(__in IBootstrapperEngine* pEngine) {
@@ -2918,7 +2931,11 @@ private:
         HKEY hkHive;
 
         // The launcher installation is separate from the Python install, so we
-        // check its state later. This also checks the file association option.
+        // check its state later. For now, assume we don't want the launcher or
+        // file associations, and if they have already been installed then
+        // loading the state will reactivate these settings.
+        pEngine->SetVariableNumeric(L"Include_launcher", 0);
+        pEngine->SetVariableNumeric(L"AssociateFiles", 0);
 
         // Get the registry key from the bundle, to save having to duplicate it
         // in multiple places.
@@ -3003,24 +3020,46 @@ private:
     void ValidateOperatingSystem() {
         LOC_STRING *pLocString = nullptr;
         
-        if (IsWindows7SP1OrGreater()) {
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Target OS is Windows 7 SP1 or later");
-            return;
-        } else if (IsWindows7OrGreater()) {
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows 7 RTM");
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 1 is required to continue installation");
-            LocGetString(_wixLoc, L"#(loc.FailureWin7MissingSP1)", &pLocString);
-        } else if (IsWindowsVistaSP2OrGreater()) {
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Target OS is Windows Vista SP2");
-            return;
-        } else if (IsWindowsVistaOrGreater()) {
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows Vista RTM or SP1");
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 2 is required to continue installation");
-            LocGetString(_wixLoc, L"#(loc.FailureVistaMissingSP2)", &pLocString);
-        } else { 
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows XP or earlier");
-            BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Windows Vista SP2 or later is required to continue installation");
-            LocGetString(_wixLoc, L"#(loc.FailureXPOrEarlier)", &pLocString);
+        if (IsWindowsServer()) {
+            if (IsWindowsVersionOrGreater(6, 1, 1)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Target OS is Windows Server 2008 R2 or later");
+                return;
+            } else if (IsWindowsVersionOrGreater(6, 1, 0)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows Server 2008 R2");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 1 is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureWS2K8R2MissingSP1)", &pLocString);
+            } else if (IsWindowsVersionOrGreater(6, 0, 2)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Target OS is Windows Server 2008 SP2 or later");
+                return;
+            } else if (IsWindowsVersionOrGreater(6, 0, 0)) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows Server 2008");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 2 is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureWS2K8MissingSP2)", &pLocString);
+            } else {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows Server 2003 or earlier");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Windows Server 2008 SP2 or later is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureWS2K3OrEarlier)", &pLocString);
+            }
+        } else {
+            if (IsWindows7SP1OrGreater()) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_STANDARD, "Target OS is Windows 7 SP1 or later");
+                return;
+            } else if (IsWindows7OrGreater()) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows 7 RTM");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 1 is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureWin7MissingSP1)", &pLocString);
+            } else if (IsWindowsVistaSP2OrGreater()) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Target OS is Windows Vista SP2");
+                return;
+            } else if (IsWindowsVistaOrGreater()) {
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows Vista RTM or SP1");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Service Pack 2 is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureVistaMissingSP2)", &pLocString);
+            } else { 
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Detected Windows XP or earlier");
+                BalLog(BOOTSTRAPPER_LOG_LEVEL_ERROR, "Windows Vista SP2 or later is required to continue installation");
+                LocGetString(_wixLoc, L"#(loc.FailureXPOrEarlier)", &pLocString);
+            }
         }
 
         if (pLocString && pLocString->wzText) {
@@ -3089,7 +3128,6 @@ public:
         _hrFinal = hrHostInitialization;
 
         _downgradingOtherVersion = FALSE;
-        _upgradingOldVersion = FALSE;
         _restartResult = BOOTSTRAPPER_APPLY_RESTART_NONE;
         _restartRequired = FALSE;
         _allowRestart = FALSE;
@@ -3104,7 +3142,6 @@ public:
         _taskbarButtonCreatedMessage = UINT_MAX;
         _taskbarButtonOK = FALSE;
         _showingInternalUIThisPackage = FALSE;
-        _triedToLaunchElevated = FALSE;
 
         _suppressPaint = FALSE;
 
@@ -3113,8 +3150,6 @@ public:
 
         _hBAFModule = nullptr;
         _baFunction = nullptr;
-
-        EnsureTargetDir();
     }
 
 
@@ -3174,7 +3209,6 @@ private:
     DWORD _calculatedExecuteProgress;
 
     BOOL _downgradingOtherVersion;
-    BOOL _upgradingOldVersion;
     BOOTSTRAPPER_APPLY_RESTART _restartResult;
     BOOL _restartRequired;
     BOOL _allowRestart;
@@ -3192,7 +3226,6 @@ private:
     UINT _taskbarButtonCreatedMessage;
     BOOL _taskbarButtonOK;
     BOOL _showingInternalUIThisPackage;
-    BOOL _triedToLaunchElevated;
 
     BOOL _suppressPaint;
 

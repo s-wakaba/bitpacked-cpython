@@ -39,7 +39,7 @@ we've considered:
    __getitem__(), get(), etc. accordingly.
 
 The approach with the least performance impact (time and space) is #2,
-mirroring the key order of dict's dk_enties with an array of node pointers.
+mirroring the key order of dict's dk_entries with an array of node pointers.
 While lookdict() and friends (dk_lookup) don't give us the index into the
 array, we make use of pointer arithmetic to get that index.  An alternative
 would be to refactor lookdict() to provide the index, explicitly exposing
@@ -194,7 +194,7 @@ the concrete API.
 Here are some ways to address this challenge:
 
 1. Change the relevant usage of the concrete API in CPython and add
-   PyDict_CheckExact() calls to each of the concrete API funcions.
+   PyDict_CheckExact() calls to each of the concrete API functions.
 2. Adjust the relevant concrete API functions to explicitly accommodate
    OrderedDict.
 3. As with #1, add the checks, but improve the abstract API with smart fast
@@ -536,14 +536,17 @@ static Py_ssize_t
 _odict_get_index_raw(PyODictObject *od, PyObject *key, Py_hash_t hash)
 {
     PyObject **value_addr = NULL;
-    PyDictKeyEntry *ep;
     PyDictKeysObject *keys = ((PyDictObject *)od)->ma_keys;
+    Py_ssize_t ix;
 
-    ep = (keys->dk_lookup)((PyDictObject *)od, key, hash, &value_addr);
-    if (ep == NULL)
+    ix = (keys->dk_lookup)((PyDictObject *)od, key, hash, &value_addr, NULL);
+    if (ix == DKIX_EMPTY) {
+        return keys->dk_nentries;  /* index of new entry */
+    }
+    if (ix < 0)
         return -1;
     /* We use pointer arithmetic to get the entry's index into the table. */
-    return ep - keys->dk_entries;
+    return ix;
 }
 
 /* Replace od->od_fast_nodes with a new table matching the size of dict's. */
@@ -565,7 +568,7 @@ _odict_resize(PyODictObject *od) {
     /* Copy the current nodes into the table. */
     _odict_FOREACH(od, node) {
         i = _odict_get_index_raw(od, _odictnode_KEY(node),
-                                  _odictnode_HASH(node));
+                                 _odictnode_HASH(node));
         if (i < 0) {
             PyMem_FREE(fast_nodes);
             return -1;
@@ -772,19 +775,17 @@ _odict_clear_nodes(PyODictObject *od)
 {
     _ODictNode *node, *next;
 
-    if (!_odict_EMPTY(od)) {
-        node = _odict_FIRST(od);
-        while (node != NULL) {
-            next = _odictnode_NEXT(node);
-            _odictnode_DEALLOC(node);
-            node = next;
-        }
-        _odict_FIRST(od) = NULL;
-        _odict_LAST(od) = NULL;
-    }
-
     _odict_free_fast_nodes(od);
     od->od_fast_nodes = NULL;
+
+    node = _odict_FIRST(od);
+    _odict_FIRST(od) = NULL;
+    _odict_LAST(od) = NULL;
+    while (node != NULL) {
+        next = _odictnode_NEXT(node);
+        _odictnode_DEALLOC(node);
+        node = next;
+    }
 }
 
 /* There isn't any memory management of nodes past this point. */
@@ -940,29 +941,7 @@ PyDoc_STRVAR(odict_sizeof__doc__, "");
 static PyObject *
 odict_sizeof(PyODictObject *od)
 {
-    PyObject *pylong;
-    Py_ssize_t res, temp;
-
-    pylong = _PyDict_SizeOf((PyDictObject *)od);
-    if (pylong == NULL)
-        return NULL;
-    res = PyLong_AsSsize_t(pylong);
-    Py_DECREF(pylong);
-    if (res == -1 && PyErr_Occurred())
-        return NULL;
-
-    res += sizeof(PyODictObject) - sizeof(PyDictObject);
-
-    /* instance dict */
-    pylong = _PyDict_SizeOf((PyDictObject *)od->od_inst_dict);
-    if (pylong == NULL)
-        return NULL;
-    temp = PyLong_AsSsize_t(pylong);
-    Py_DECREF(pylong);
-    if (temp == -1 && PyErr_Occurred())
-        return NULL;
-    res += temp;
-
+    Py_ssize_t res = _PyDict_SizeOf((PyDictObject *)od);
     res += sizeof(_ODictNode *) * _odict_FAST_SIZE(od);  /* od_fast_nodes */
     if (!_odict_EMPTY(od)) {
         res += sizeof(_ODictNode) * PyODict_SIZE(od);  /* linked-list */
@@ -1255,8 +1234,6 @@ odict_clear(register PyODictObject *od)
 {
     PyDict_Clear((PyObject *)od);
     _odict_clear_nodes(od);
-    _odict_FIRST(od) = NULL;
-    _odict_LAST(od) = NULL;
     if (_odict_resize(od) < 0)
         return NULL;
     Py_RETURN_NONE;
@@ -1450,13 +1427,12 @@ static PyMethodDef odict_methods[] = {
  * OrderedDict members
  */
 
-/* tp_members */
+/* tp_getset */
 
-static PyMemberDef odict_members[] = {
-    {"__dict__", T_OBJECT, offsetof(PyODictObject, od_inst_dict), READONLY},
-    {0}
+static PyGetSetDef odict_getset[] = {
+    {"__dict__", PyObject_GenericGetDict, PyObject_GenericSetDict},
+    {NULL}
 };
-
 
 /* ----------------------------------------------
  * OrderedDict type slot methods
@@ -1489,7 +1465,7 @@ odict_dealloc(PyODictObject *self)
     ++tstate->trash_delete_nesting;
 
     Py_TRASHCAN_SAFE_END(self)
-};
+}
 
 /* tp_repr */
 
@@ -1566,7 +1542,7 @@ Done:
     Py_XDECREF(pieces);
     Py_ReprLeave((PyObject *)self);
     return result;
-};
+}
 
 /* tp_doc */
 
@@ -1578,8 +1554,13 @@ PyDoc_STRVAR(odict_doc,
 static int
 odict_traverse(PyODictObject *od, visitproc visit, void *arg)
 {
+    _ODictNode *node;
+
     Py_VISIT(od->od_inst_dict);
     Py_VISIT(od->od_weakreflist);
+    _odict_FOREACH(od, node) {
+        Py_VISIT(_odictnode_KEY(node));
+    }
     return PyDict_Type.tp_traverse((PyObject *)od, visit, arg);
 }
 
@@ -1633,7 +1614,7 @@ odict_richcompare(PyObject *v, PyObject *w, int op)
     } else {
         Py_RETURN_NOTIMPLEMENTED;
     }
-};
+}
 
 /* tp_iter */
 
@@ -1641,7 +1622,7 @@ static PyObject *
 odict_iter(PyODictObject *od)
 {
     return odictiter_new(od, _odict_ITER_KEYS);
-};
+}
 
 /* tp_init */
 
@@ -1667,27 +1648,19 @@ odict_init(PyObject *self, PyObject *args, PyObject *kwds)
         Py_DECREF(res);
         return 0;
     }
-};
+}
 
 /* tp_new */
 
 static PyObject *
 odict_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
-    PyObject *dict;
     PyODictObject *od;
 
-    dict = PyDict_New();
-    if (dict == NULL)
-        return NULL;
-
     od = (PyODictObject *)PyDict_Type.tp_new(type, args, kwds);
-    if (od == NULL) {
-        Py_DECREF(dict);
+    if (od == NULL)
         return NULL;
-    }
 
-    od->od_inst_dict = dict;
     /* type constructor fills the memory with zeros (see
        PyType_GenericAlloc()), there is no need to set them to zero again */
     if (_odict_resize(od) < 0) {
@@ -1729,8 +1702,8 @@ PyTypeObject PyODict_Type = {
     (getiterfunc)odict_iter,                    /* tp_iter */
     0,                                          /* tp_iternext */
     odict_methods,                              /* tp_methods */
-    odict_members,                              /* tp_members */
-    0,                                          /* tp_getset */
+    0,                                          /* tp_members */
+    odict_getset,                               /* tp_getset */
     &PyDict_Type,                               /* tp_base */
     0,                                          /* tp_dict */
     0,                                          /* tp_descr_get */
@@ -1750,7 +1723,7 @@ PyTypeObject PyODict_Type = {
 PyObject *
 PyODict_New(void) {
     return odict_new(&PyODict_Type, NULL, NULL);
-};
+}
 
 static int
 _PyODict_SetItem_KnownHash(PyObject *od, PyObject *key, PyObject *value,
@@ -1768,7 +1741,7 @@ _PyODict_SetItem_KnownHash(PyObject *od, PyObject *key, PyObject *value,
         }
     }
     return res;
-};
+}
 
 int
 PyODict_SetItem(PyObject *od, PyObject *key, PyObject *value)
@@ -1777,7 +1750,7 @@ PyODict_SetItem(PyObject *od, PyObject *key, PyObject *value)
     if (hash == -1)
         return -1;
     return _PyODict_SetItem_KnownHash(od, key, value, hash);
-};
+}
 
 int
 PyODict_DelItem(PyObject *od, PyObject *key)
@@ -1790,7 +1763,7 @@ PyODict_DelItem(PyObject *od, PyObject *key)
     if (res < 0)
         return -1;
     return _PyDict_DelItem_KnownHash(od, key, hash);
-};
+}
 
 
 /* -------------------------------------------
@@ -2383,8 +2356,7 @@ mutablemapping_update(PyObject *self, PyObject *args, PyObject *kwargs)
         PyObject *other = PyTuple_GET_ITEM(args, 0);  /* borrowed reference */
         assert(other != NULL);
         Py_INCREF(other);
-        if (PyDict_CheckExact(other) ||
-            _PyObject_HasAttrId(other, &PyId_items)) {  /* never fails */
+        if PyDict_CheckExact(other) {
             PyObject *items;
             if (PyDict_CheckExact(other))
                 items = PyDict_Items(other);
@@ -2425,6 +2397,20 @@ mutablemapping_update(PyObject *self, PyObject *args, PyObject *kwargs)
             Py_DECREF(other);
             Py_DECREF(iterator);
             if (res != 0 || PyErr_Occurred())
+                return NULL;
+        }
+        else if (_PyObject_HasAttrId(other, &PyId_items)) {  /* never fails */
+            PyObject *items;
+            if (PyDict_CheckExact(other))
+                items = PyDict_Items(other);
+            else
+                items = _PyObject_CallMethodId(other, &PyId_items, NULL);
+            Py_DECREF(other);
+            if (items == NULL)
+                return NULL;
+            res = mutablemapping_add_pairs(self, items);
+            Py_DECREF(items);
+            if (res == -1)
                 return NULL;
         }
         else {
