@@ -80,10 +80,13 @@ sends logging output to a disk file.  It inherits the output functionality from
 
    Returns a new instance of the :class:`FileHandler` class. The specified file is
    opened and used as the stream for logging. If *mode* is not specified,
-   :const:`'a'` is used.  If *encoding* is not *None*, it is used to open the file
+   :const:`'a'` is used.  If *encoding* is not ``None``, it is used to open the file
    with that encoding.  If *delay* is true, then file opening is deferred until the
    first call to :meth:`emit`. By default, the file grows indefinitely.
 
+   .. versionchanged:: 3.6
+      As well as string values, :class:`~pathlib.Path` objects are also accepted
+      for the *filename* argument.
 
    .. method:: close()
 
@@ -152,20 +155,31 @@ exclusive locks - and so there is no need for such a handler. Furthermore,
 for this value.
 
 
-.. class:: WatchedFileHandler(filename[,mode[, encoding[, delay]]])
+.. class:: WatchedFileHandler(filename, mode='a', encoding=None, delay=False)
 
    Returns a new instance of the :class:`WatchedFileHandler` class. The specified
    file is opened and used as the stream for logging. If *mode* is not specified,
-   :const:`'a'` is used.  If *encoding* is not *None*, it is used to open the file
+   :const:`'a'` is used.  If *encoding* is not ``None``, it is used to open the file
    with that encoding.  If *delay* is true, then file opening is deferred until the
    first call to :meth:`emit`.  By default, the file grows indefinitely.
+
+   .. versionchanged:: 3.6
+      As well as string values, :class:`~pathlib.Path` objects are also accepted
+      for the *filename* argument.
+
+   .. method:: reopenIfNeeded()
+
+      Checks to see if the file has changed.  If it has, the existing stream is
+      flushed and closed and the file opened again, typically as a precursor to
+      outputting the record to the file.
+
+      .. versionadded:: 3.6
 
 
    .. method:: emit(record)
 
-      Outputs the record to the file, but first checks to see if the file has
-      changed.  If it has, the existing stream is flushed and closed and the
-      file opened again, before outputting the record to the file.
+      Outputs the record to the file, but first calls :meth:`reopenIfNeeded` to
+      reopen the file if it has changed.
 
 .. _base-rotating-handler:
 
@@ -257,11 +271,11 @@ The :class:`RotatingFileHandler` class, located in the :mod:`logging.handlers`
 module, supports rotation of disk log files.
 
 
-.. class:: RotatingFileHandler(filename, mode='a', maxBytes=0, backupCount=0, encoding=None, delay=0)
+.. class:: RotatingFileHandler(filename, mode='a', maxBytes=0, backupCount=0, encoding=None, delay=False)
 
    Returns a new instance of the :class:`RotatingFileHandler` class. The specified
    file is opened and used as the stream for logging. If *mode* is not specified,
-   ``'a'`` is used.  If *encoding* is not *None*, it is used to open the file
+   ``'a'`` is used.  If *encoding* is not ``None``, it is used to open the file
    with that encoding.  If *delay* is true, then file opening is deferred until the
    first call to :meth:`emit`.  By default, the file grows indefinitely.
 
@@ -279,6 +293,9 @@ module, supports rotation of disk log files.
    :file:`app.log.2`, etc.  exist, then they are renamed to :file:`app.log.2`,
    :file:`app.log.3` etc.  respectively.
 
+   .. versionchanged:: 3.6
+      As well as string values, :class:`~pathlib.Path` objects are also accepted
+      for the *filename* argument.
 
    .. method:: doRollover()
 
@@ -310,21 +327,24 @@ timed intervals.
    You can use the *when* to specify the type of *interval*. The list of possible
    values is below.  Note that they are not case sensitive.
 
-   +----------------+-----------------------+
-   | Value          | Type of interval      |
-   +================+=======================+
-   | ``'S'``        | Seconds               |
-   +----------------+-----------------------+
-   | ``'M'``        | Minutes               |
-   +----------------+-----------------------+
-   | ``'H'``        | Hours                 |
-   +----------------+-----------------------+
-   | ``'D'``        | Days                  |
-   +----------------+-----------------------+
-   | ``'W0'-'W6'``  | Weekday (0=Monday)    |
-   +----------------+-----------------------+
-   | ``'midnight'`` | Roll over at midnight |
-   +----------------+-----------------------+
+   +----------------+----------------------------+-------------------------+
+   | Value          | Type of interval           | If/how *atTime* is used |
+   +================+============================+=========================+
+   | ``'S'``        | Seconds                    | Ignored                 |
+   +----------------+----------------------------+-------------------------+
+   | ``'M'``        | Minutes                    | Ignored                 |
+   +----------------+----------------------------+-------------------------+
+   | ``'H'``        | Hours                      | Ignored                 |
+   +----------------+----------------------------+-------------------------+
+   | ``'D'``        | Days                       | Ignored                 |
+   +----------------+----------------------------+-------------------------+
+   | ``'W0'-'W6'``  | Weekday (0=Monday)         | Used to compute initial |
+   |                |                            | rollover time           |
+   +----------------+----------------------------+-------------------------+
+   | ``'midnight'`` | Roll over at midnight, if  | Used to compute initial |
+   |                | *atTime* not specified,    | rollover time           |
+   |                | else at time *atTime*      |                         |
+   +----------------+----------------------------+-------------------------+
 
    When using weekday-based rotation, specify 'W0' for Monday, 'W1' for
    Tuesday, and so on up to 'W6' for Sunday. In this case, the value passed for
@@ -352,15 +372,34 @@ timed intervals.
 
    If *atTime* is not ``None``, it must be a ``datetime.time`` instance which
    specifies the time of day when rollover occurs, for the cases where rollover
-   is set to happen "at midnight" or "on a particular weekday".
+   is set to happen "at midnight" or "on a particular weekday". Note that in
+   these cases, the *atTime* value is effectively used to compute the *initial*
+   rollover, and subsequent rollovers would be calculated via the normal
+   interval calculation.
+
+   .. note:: Calculation of the initial rollover time is done when the handler
+      is initialised. Calculation of subsequent rollover times is done only
+      when rollover occurs, and rollover occurs only when emitting output. If
+      this is not kept in mind, it might lead to some confusion. For example,
+      if an interval of "every minute" is set, that does not mean you will
+      always see log files with times (in the filename) separated by a minute;
+      if, during application execution, logging output is generated more
+      frequently than once a minute, *then* you can expect to see log files
+      with times separated by a minute. If, on the other hand, logging messages
+      are only output once every five minutes (say), then there will be gaps in
+      the file times corresponding to the minutes where no output (and hence no
+      rollover) occurred.
 
    .. versionchanged:: 3.4
       *atTime* parameter was added.
 
+   .. versionchanged:: 3.6
+      As well as string values, :class:`~pathlib.Path` objects are also accepted
+      for the *filename* argument.
+
    .. method:: doRollover()
 
       Does a rollover, as described above.
-
 
    .. method:: emit(record)
 
@@ -798,12 +837,18 @@ should, then :meth:`flush` is expected to do the flushing.
       overridden to implement custom flushing strategies.
 
 
-.. class:: MemoryHandler(capacity, flushLevel=ERROR, target=None)
+.. class:: MemoryHandler(capacity, flushLevel=ERROR, target=None, flushOnClose=True)
 
    Returns a new instance of the :class:`MemoryHandler` class. The instance is
    initialized with a buffer size of *capacity*. If *flushLevel* is not specified,
    :const:`ERROR` is used. If no *target* is specified, the target will need to be
-   set using :meth:`setTarget` before this handler does anything useful.
+   set using :meth:`setTarget` before this handler does anything useful. If
+   *flushOnClose* is specified as ``False``, then the buffer is *not* flushed when
+   the handler is closed. If not specified or specified as ``True``, the previous
+   behaviour of flushing the buffer will occur when the handler is closed.
+
+   .. versionchanged:: 3.6
+      The *flushOnClose* parameter was added.
 
 
    .. method:: close()

@@ -128,44 +128,60 @@ partial_call(partialobject *pto, PyObject *args, PyObject *kw)
 {
     PyObject *ret;
     PyObject *argappl, *kwappl;
+    PyObject **stack;
+    Py_ssize_t nargs;
 
     assert (PyCallable_Check(pto->fn));
     assert (PyTuple_Check(pto->args));
     assert (PyDict_Check(pto->kw));
 
     if (PyTuple_GET_SIZE(pto->args) == 0) {
-        argappl = args;
-        Py_INCREF(args);
-    } else if (PyTuple_GET_SIZE(args) == 0) {
-        argappl = pto->args;
-        Py_INCREF(pto->args);
-    } else {
+        stack = &PyTuple_GET_ITEM(args, 0);
+        nargs = PyTuple_GET_SIZE(args);
+        argappl = NULL;
+    }
+    else if (PyTuple_GET_SIZE(args) == 0) {
+        stack = &PyTuple_GET_ITEM(pto->args, 0);
+        nargs = PyTuple_GET_SIZE(pto->args);
+        argappl = NULL;
+    }
+    else {
+        stack = NULL;
         argappl = PySequence_Concat(pto->args, args);
-        if (argappl == NULL)
+        if (argappl == NULL) {
             return NULL;
+        }
+
         assert(PyTuple_Check(argappl));
     }
 
     if (PyDict_Size(pto->kw) == 0) {
         kwappl = kw;
         Py_XINCREF(kwappl);
-    } else {
+    }
+    else {
         kwappl = PyDict_Copy(pto->kw);
         if (kwappl == NULL) {
-            Py_DECREF(argappl);
+            Py_XDECREF(argappl);
             return NULL;
         }
+
         if (kw != NULL) {
             if (PyDict_Merge(kwappl, kw, 1) != 0) {
-                Py_DECREF(argappl);
+                Py_XDECREF(argappl);
                 Py_DECREF(kwappl);
                 return NULL;
             }
         }
     }
 
-    ret = PyObject_Call(pto->fn, argappl, kwappl);
-    Py_DECREF(argappl);
+    if (stack) {
+        ret = _PyObject_FastCallDict(pto->fn, stack, nargs, kwappl);
+    }
+    else {
+        ret = PyObject_Call(pto->fn, argappl, kwappl);
+        Py_DECREF(argappl);
+    }
     Py_XDECREF(kwappl);
     return ret;
 }
@@ -203,40 +219,45 @@ static PyGetSetDef partial_getsetlist[] = {
 static PyObject *
 partial_repr(partialobject *pto)
 {
-    PyObject *result;
+    PyObject *result = NULL;
     PyObject *arglist;
-    PyObject *tmp;
     Py_ssize_t i, n;
     PyObject *key, *value;
+    int status;
+
+    status = Py_ReprEnter((PyObject *)pto);
+    if (status != 0) {
+        if (status < 0)
+            return NULL;
+        return PyUnicode_FromString("...");
+    }
 
     arglist = PyUnicode_FromString("");
-    if (arglist == NULL) {
-        return NULL;
-    }
+    if (arglist == NULL)
+        goto done;
     /* Pack positional arguments */
     assert (PyTuple_Check(pto->args));
     n = PyTuple_GET_SIZE(pto->args);
     for (i = 0; i < n; i++) {
-        tmp = PyUnicode_FromFormat("%U, %R", arglist,
-                                   PyTuple_GET_ITEM(pto->args, i));
-        Py_DECREF(arglist);
-        if (tmp == NULL)
-            return NULL;
-        arglist = tmp;
+        Py_SETREF(arglist, PyUnicode_FromFormat("%U, %R", arglist,
+                                        PyTuple_GET_ITEM(pto->args, i)));
+        if (arglist == NULL)
+            goto done;
     }
     /* Pack keyword arguments */
     assert (PyDict_Check(pto->kw));
     for (i = 0; PyDict_Next(pto->kw, &i, &key, &value);) {
-        tmp = PyUnicode_FromFormat("%U, %U=%R", arglist,
-                                    key, value);
-        Py_DECREF(arglist);
-        if (tmp == NULL)
-            return NULL;
-        arglist = tmp;
+        Py_SETREF(arglist, PyUnicode_FromFormat("%U, %U=%R", arglist,
+                                                key, value));
+        if (arglist == NULL)
+            goto done;
     }
     result = PyUnicode_FromFormat("%s(%R%U)", Py_TYPE(pto)->tp_name,
                                   pto->fn, arglist);
     Py_DECREF(arglist);
+
+ done:
+    Py_ReprLeave((PyObject *)pto);
     return result;
 }
 
@@ -456,12 +477,12 @@ static PyObject *
 keyobject_richcompare(PyObject *ko, PyObject *other, int op)
 {
     PyObject *res;
-    PyObject *args;
     PyObject *x;
     PyObject *y;
     PyObject *compare;
     PyObject *answer;
     static PyObject *zero;
+    PyObject* stack[2];
 
     if (zero == NULL) {
         zero = PyLong_FromLong(0);
@@ -485,17 +506,13 @@ keyobject_richcompare(PyObject *ko, PyObject *other, int op)
     /* Call the user's comparison function and translate the 3-way
      * result into true or false (or error).
      */
-    args = PyTuple_New(2);
-    if (args == NULL)
+    stack[0] = x;
+    stack[1] = y;
+    res = _PyObject_FastCall(compare, stack, 2);
+    if (res == NULL) {
         return NULL;
-    Py_INCREF(x);
-    Py_INCREF(y);
-    PyTuple_SET_ITEM(args, 0, x);
-    PyTuple_SET_ITEM(args, 1, y);
-    res = PyObject_Call(compare, args, NULL);
-    Py_DECREF(args);
-    if (res == NULL)
-        return NULL;
+    }
+
     answer = PyObject_RichCompare(res, zero, op);
     Py_DECREF(res);
     return answer;
@@ -776,8 +793,10 @@ infinite_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwd
     if (!key)
         return NULL;
     hash = PyObject_Hash(key);
-    if (hash == -1)
+    if (hash == -1) {
+        Py_DECREF(key);
         return NULL;
+    }
     result = _PyDict_GetItem_KnownHash(self->cache, key, hash);
     if (result) {
         Py_INCREF(result);
@@ -832,8 +851,10 @@ bounded_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwds
     if (!key)
         return NULL;
     hash = PyObject_Hash(key);
-    if (hash == -1)
+    if (hash == -1) {
+        Py_DECREF(key);
         return NULL;
+    }
     link  = (lru_list_elem *)_PyDict_GetItem_KnownHash(self->cache, key, hash);
     if (link) {
         lru_cache_extricate_link(link);

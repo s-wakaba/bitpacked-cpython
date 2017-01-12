@@ -21,8 +21,7 @@
 #include <dirent.h>
 #endif
 
-#if defined(__ANDROID__) && !defined(SYS_getdents64)
-/* Android doesn't expose syscalls, add the definition manually. */
+#if defined(__ANDROID__) && __ANDROID_API__ < 21 && !defined(SYS_getdents64)
 # include <sys/linux-syscalls.h>
 # define SYS_getdents64  __NR_getdents64
 #endif
@@ -72,7 +71,7 @@ _enable_gc(int need_to_reenable_gc, PyObject *gc_module)
 
 /* Convert ASCII to a positive int, no libc call. no overflow. -1 on error. */
 static int
-_pos_int_from_ascii(char *name)
+_pos_int_from_ascii(const char *name)
 {
     int num = 0;
     while (*name >= '0' && *name <= '9') {
@@ -522,7 +521,7 @@ error:
         char *cur;
         _Py_write_noraise(errpipe_write, "OSError:", 8);
         cur = hex_errno + sizeof(hex_errno);
-        while (saved_errno != 0 && cur > hex_errno) {
+        while (saved_errno != 0 && cur != hex_errno) {
             *--cur = Py_hexdigits[saved_errno % 16];
             saved_errno /= 16;
         }

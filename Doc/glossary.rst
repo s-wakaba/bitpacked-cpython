@@ -74,6 +74,34 @@ Glossary
       :keyword:`async with` statement by defining :meth:`__aenter__` and
       :meth:`__aexit__` methods.  Introduced by :pep:`492`.
 
+   asynchronous generator
+      A function which returns an :term:`asynchronous generator iterator`.  It
+      looks like a coroutine function defined with :keyword:`async def` except
+      that it contains :keyword:`yield` expressions for producing a series of
+      values usable in an :keyword:`async for` loop.
+
+      Usually refers to a asynchronous generator function, but may refer to an
+      *asynchronous generator iterator* in some contexts.  In cases where the
+      intended meaning isn't clear, using the full terms avoids ambiguity.
+
+      An asynchronous generator function may contain :keyword:`await`
+      expressions as well as :keyword:`async for`, and :keyword:`async with`
+      statements.
+
+   asynchronous generator iterator
+      An object created by a :term:`asynchronous generator` function.
+
+      This is an :term:`asynchronous iterator` which when called using the
+      :meth:`__anext__` method returns an awaitable object which will execute
+      that the body of the asynchronous generator function until the
+      next :keyword:`yield` expression.
+
+      Each :keyword:`yield` temporarily suspends processing, remembering the
+      location execution state (including local variables and pending
+      try-statements).  When the *asynchronous generator iterator* effectively
+      resumes with another awaitable returned by :meth:`__anext__`, it
+      picks-up where it left-off.  See :pep:`492` and :pep:`525`.
+
    asynchronous iterable
       An object, that can be used in an :keyword:`async for` statement.
       Must return an :term:`asynchronous iterator` from its
@@ -718,6 +746,8 @@ Glossary
 
            def func(foo, bar=None): ...
 
+      .. _positional-only_parameter:
+
       * :dfn:`positional-only`: specifies an argument that can be supplied only
         by position.  Python has no syntax for defining positional-only
         parameters.  However, some built-in functions have positional-only
@@ -775,6 +805,16 @@ Glossary
    path based finder
       One of the default :term:`meta path finders <meta path finder>` which
       searches an :term:`import path` for modules.
+
+   path-like object
+      An object representing a file system path. A path-like object is either
+      a :class:`str` or :class:`bytes` object representing a path, or an object
+      implementing the :class:`os.PathLike` protocol. An object that supports
+      the :class:`os.PathLike` protocol can be converted to a :class:`str` or
+      :class:`bytes` file system path by calling the :func:`os.fspath` function;
+      :func:`os.fsdecode` and :func:`os.fsencode` can be used to guarantee a
+      :class:`str` or :class:`bytes` result instead, respectively. Introduced
+      by :pep:`519`.
 
    portion
       A set of files in a single directory (possibly stored in a zip file)
@@ -952,13 +992,25 @@ Glossary
       ``'\r'``.  See :pep:`278` and :pep:`3116`, as well as
       :func:`bytes.splitlines` for an additional use.
 
+   variable annotation
+      A type metadata value associated with a module global variable or
+      a class attribute. Its syntax is explained in section :ref:`annassign`.
+      Annotations are stored in the :attr:`__annotations__` special
+      attribute of a class or module object and can be accessed using
+      :func:`typing.get_type_hints`.
+
+      Python itself does not assign any particular meaning to variable
+      annotations. They are intended to be interpreted by third-party libraries
+      or type checking tools. See :pep:`526`, :pep:`484` which describe
+      some of their potential uses.
+
    virtual environment
       A cooperatively isolated runtime environment that allows Python users
       and applications to install and upgrade Python distribution packages
       without interfering with the behaviour of other Python applications
       running on the same system.
 
-      See also :ref:`scripts-pyvenv`.
+      See also :mod:`venv`.
 
    virtual machine
       A computer defined entirely in software.  Python's virtual machine

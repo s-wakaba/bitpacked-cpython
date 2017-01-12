@@ -485,7 +485,7 @@ class`. In addition, it provides a few more methods:
         >>> (-1024).to_bytes(10, byteorder='big', signed=True)
         b'\xff\xff\xff\xff\xff\xff\xff\xff\xfc\x00'
         >>> x = 1000
-        >>> x.to_bytes((x.bit_length() // 8) + 1, byteorder='little')
+        >>> x.to_bytes((x.bit_length() + 7) // 8, byteorder='little')
         b'\xe8\x03'
 
     The integer is represented using *length* bytes.  An :exc:`OverflowError`
@@ -692,16 +692,16 @@ number, :class:`float`, or :class:`complex`::
            m, n = m // P, n // P
 
        if n % P == 0:
-           hash_ = sys.hash_info.inf
+           hash_value = sys.hash_info.inf
        else:
            # Fermat's Little Theorem: pow(n, P-1, P) is 1, so
            # pow(n, P-2, P) gives the inverse of n modulo P.
-           hash_ = (abs(m) % P) * pow(n, P - 2, P) % P
+           hash_value = (abs(m) % P) * pow(n, P - 2, P) % P
        if m < 0:
-           hash_ = -hash_
-       if hash_ == -1:
-           hash_ = -2
-       return hash_
+           hash_value = -hash_value
+       if hash_value == -1:
+           hash_value = -2
+       return hash_value
 
    def hash_float(x):
        """Compute the hash of a float x."""
@@ -716,13 +716,13 @@ number, :class:`float`, or :class:`complex`::
    def hash_complex(z):
        """Compute the hash of a complex number z."""
 
-       hash_ = hash_float(z.real) + sys.hash_info.imag * hash_float(z.imag)
+       hash_value = hash_float(z.real) + sys.hash_info.imag * hash_float(z.imag)
        # do a signed reduction modulo 2**sys.hash_info.width
        M = 2**(sys.hash_info.width - 1)
-       hash_ = (hash_ & (M - 1)) - (hash & M)
-       if hash_ == -1:
-           hash_ == -2
-       return hash_
+       hash_value = (hash_value & (M - 1)) - (hash_value & M)
+       if hash_value == -1:
+           hash_value = -2
+       return hash_value
 
 .. _typeiter:
 
@@ -1363,6 +1363,11 @@ objects that compare equal might have different :attr:`~range.start`,
    The :attr:`~range.start`, :attr:`~range.stop` and :attr:`~range.step`
    attributes.
 
+.. seealso::
+
+   * The `linspace recipe <http://code.activestate.com/recipes/579000/>`_
+     shows how to implement a lazy version of range that suitable for floating
+     point applications.
 
 .. index::
    single: string; text sequence type
@@ -1453,8 +1458,8 @@ multiple fragments.
 
    For more information on the ``str`` class and its methods, see
    :ref:`textseq` and the :ref:`string-methods` section below.  To output
-   formatted strings, see the :ref:`formatstrings` section.  In addition,
-   see the :ref:`stringservices` section.
+   formatted strings, see the :ref:`f-strings` and :ref:`formatstrings`
+   sections.  In addition, see the :ref:`stringservices` section.
 
 
 .. index::
@@ -1751,13 +1756,13 @@ expression support in the :mod:`re` module).
 
    If there is only one argument, it must be a dictionary mapping Unicode
    ordinals (integers) or characters (strings of length 1) to Unicode ordinals,
-   strings (of arbitrary lengths) or None.  Character keys will then be
+   strings (of arbitrary lengths) or ``None``.  Character keys will then be
    converted to ordinals.
 
    If there are two arguments, they must be strings of equal length, and in the
    resulting dictionary, each character in x will be mapped to the character at
    the same position in y.  If there is a third argument, it must be a string,
-   whose characters will be mapped to None in the result.
+   whose characters will be mapped to ``None`` in the result.
 
 
 .. method:: str.partition(sep)
@@ -2056,8 +2061,8 @@ expression support in the :mod:`re` module).
 .. index::
    single: formatting, string (%)
    single: interpolation, string (%)
-   single: string; formatting
-   single: string; interpolation
+   single: string; formatting, printf
+   single: string; interpolation, printf
    single: printf-style formatting
    single: sprintf-style formatting
    single: % formatting
@@ -2067,9 +2072,10 @@ expression support in the :mod:`re` module).
 
    The formatting operations described here exhibit a variety of quirks that
    lead to a number of common errors (such as failing to display tuples and
-   dictionaries correctly).  Using the newer :meth:`str.format` interface
-   helps avoid these errors, and also provides a generally more powerful,
-   flexible and extensible approach to formatting text.
+   dictionaries correctly).  Using the newer :ref:`formatted
+   string literals <f-strings>` or the :meth:`str.format` interface
+   helps avoid these errors.  These alternatives also provide more powerful,
+   flexible and extensible approaches to formatting text.
 
 String objects have one unique built-in operation: the ``%`` operator (modulo).
 This is also known as the string *formatting* or *interpolation* operator.
@@ -2630,8 +2636,8 @@ arbitrary binary data.
    The prefix(es) to search for may be any :term:`bytes-like object`.
 
 
-.. method:: bytes.translate(table[, delete])
-            bytearray.translate(table[, delete])
+.. method:: bytes.translate(table, delete=b'')
+            bytearray.translate(table, delete=b'')
 
    Return a copy of the bytes or bytearray object where all bytes occurring in
    the optional argument *delete* are removed, and the remaining bytes have
@@ -2646,6 +2652,9 @@ arbitrary binary data.
 
       >>> b'read this short text'.translate(None, b'aeiou')
       b'rd ths shrt txt'
+
+   .. versionchanged:: 3.6
+      *delete* is now supported as a keyword argument.
 
 
 The following methods on bytes and bytearray objects have default behaviours
@@ -3751,7 +3760,7 @@ copying.
       memory as an N-dimensional array.
 
       .. versionchanged:: 3.3
-         An empty tuple instead of None when ndim = 0.
+         An empty tuple instead of ``None`` when ndim = 0.
 
    .. attribute:: strides
 
@@ -3759,7 +3768,7 @@ copying.
       access each element for each dimension of the array.
 
       .. versionchanged:: 3.3
-         An empty tuple instead of None when ndim = 0.
+         An empty tuple instead of ``None`` when ndim = 0.
 
    .. attribute:: suboffsets
 
@@ -3866,17 +3875,17 @@ The constructors for both classes work the same:
       Test whether the set is a proper superset of *other*, that is, ``set >=
       other and set != other``.
 
-   .. method:: union(other, ...)
+   .. method:: union(*others)
                set | other | ...
 
       Return a new set with elements from the set and all others.
 
-   .. method:: intersection(other, ...)
+   .. method:: intersection(*others)
                set & other & ...
 
       Return a new set with elements common to the set and all others.
 
-   .. method:: difference(other, ...)
+   .. method:: difference(*others)
                set - other - ...
 
       Return a new set with elements in the set that are not in the others.
@@ -3926,17 +3935,17 @@ The constructors for both classes work the same:
    The following table lists operations available for :class:`set` that do not
    apply to immutable instances of :class:`frozenset`:
 
-   .. method:: update(other, ...)
+   .. method:: update(*others)
                set |= other | ...
 
       Update the set, adding elements from all others.
 
-   .. method:: intersection_update(other, ...)
+   .. method:: intersection_update(*others)
                set &= other & ...
 
       Update the set, keeping only elements found in it and all others.
 
-   .. method:: difference_update(other, ...)
+   .. method:: difference_update(*others)
                set -= other | ...
 
       Update the set, removing elements found in others.
@@ -4360,9 +4369,10 @@ an (external) *definition* for a module named *foo* somewhere.)
 A special attribute of every module is :attr:`~object.__dict__`. This is the
 dictionary containing the module's symbol table. Modifying this dictionary will
 actually change the module's symbol table, but direct assignment to the
-:attr:`__dict__` attribute is not possible (you can write
+:attr:`~object.__dict__` attribute is not possible (you can write
 ``m.__dict__['a'] = 1``, which defines ``m.a`` to be ``1``, but you can't write
-``m.__dict__ = {}``).  Modifying :attr:`__dict__` directly is not recommended.
+``m.__dict__ = {}``).  Modifying :attr:`~object.__dict__` directly is
+not recommended.
 
 Modules built into the interpreter are written like this: ``<module 'sys'
 (built-in)>``.  If loaded from a file, they are written as ``<module 'os' from
@@ -4575,14 +4585,16 @@ types, where they are relevant.  Some of these are not reported by the
    The tuple of base classes of a class object.
 
 
-.. attribute:: class.__name__
+.. attribute:: definition.__name__
 
-   The name of the class or type.
+   The name of the class, function, method, descriptor, or
+   generator instance.
 
 
-.. attribute:: class.__qualname__
+.. attribute:: definition.__qualname__
 
-   The :term:`qualified name` of the class or type.
+   The :term:`qualified name` of the class, function, method, descriptor,
+   or generator instance.
 
    .. versionadded:: 3.3
 

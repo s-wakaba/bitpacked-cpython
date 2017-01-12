@@ -36,7 +36,7 @@ implement import semantics.
 
 When a module is first imported, Python searches for the module and if found,
 it creates a module object [#fnmo]_, initializing it.  If the named module
-cannot be found, an :exc:`ImportError` is raised.  Python implements various
+cannot be found, an :exc:`ModuleNotFoundError` is raised.  Python implements various
 strategies to search for the named module when the import machinery is
 invoked.  These strategies can be modified and extended by using various hooks
 described in the sections below.
@@ -167,7 +167,7 @@ arguments to the :keyword:`import` statement, or from the parameters to the
 This name will be used in various phases of the import search, and it may be
 the dotted path to a submodule, e.g. ``foo.bar.baz``.  In this case, Python
 first tries to import ``foo``, then ``foo.bar``, and finally ``foo.bar.baz``.
-If any of the intermediate imports fail, an :exc:`ImportError` is raised.
+If any of the intermediate imports fail, an :exc:`ModuleNotFoundError` is raised.
 
 
 The module cache
@@ -186,7 +186,7 @@ object.
 During import, the module name is looked up in :data:`sys.modules` and if
 present, the associated value is the module satisfying the import, and the
 process completes.  However, if the value is ``None``, then an
-:exc:`ImportError` is raised.  If the module name is missing, Python will
+:exc:`ModuleNotFoundError` is raised.  If the module name is missing, Python will
 continue searching for the module.
 
 :data:`sys.modules` is writable.  Deleting a key may not destroy the
@@ -194,7 +194,7 @@ associated module (as other modules may hold references to it),
 but it will invalidate the cache entry for the named module, causing
 Python to search anew for the named module upon its next
 import. The key can also be assigned to ``None``, forcing the next import
-of the module to result in an :exc:`ImportError`.
+of the module to result in an :exc:`ModuleNotFoundError`.
 
 Beware though, as if you keep a reference to the module object,
 invalidate its cache entry in :data:`sys.modules`, and then re-import the
@@ -288,8 +288,8 @@ the named module or not.
 If the meta path finder knows how to handle the named module, it returns a
 spec object.  If it cannot handle the named module, it returns ``None``.  If
 :data:`sys.meta_path` processing reaches the end of its list without returning
-a spec, then an :exc:`ImportError` is raised.  Any other exceptions raised
-are simply propagated up, aborting the import process.
+a spec, then a :exc:`ModuleNotFoundError` is raised.  Any other exceptions
+raised are simply propagated up, aborting the import process.
 
 The :meth:`~importlib.abc.MetaPathFinder.find_spec()` method of meta path
 finders is called with two or three arguments.  The first is the fully
@@ -298,9 +298,9 @@ The second argument is the path entries to use for the module search.  For
 top-level modules, the second argument is ``None``, but for submodules or
 subpackages, the second argument is the value of the parent package's
 ``__path__`` attribute. If the appropriate ``__path__`` attribute cannot
-be accessed, an :exc:`ImportError` is raised.  The third argument is an
-existing module object that will be the target of loading later.  The
-import system passes in a target module only during reload.
+be accessed, an :exc:`ModuleNotFoundError` is raised.  The third argument
+is an existing module object that will be the target of loading later.
+The import system passes in a target module only during reload.
 
 The meta path may be traversed multiple times for a single import request.
 For example, assuming none of the modules involved has already been cached,
@@ -554,18 +554,29 @@ the module.
    details.
 
    This attribute is used instead of ``__name__`` to calculate explicit
-   relative imports for main modules, as defined in :pep:`366`.
+   relative imports for main modules, as defined in :pep:`366`. It is
+   expected to have the same value as ``__spec__.parent``.
+
+   .. versionchanged:: 3.6
+      The value of ``__package__`` is expected to be the same as
+      ``__spec__.parent``.
 
 .. attribute:: __spec__
 
    The ``__spec__`` attribute must be set to the module spec that was
-   used when importing the module.  This is used primarily for
-   introspection and during reloading.  Setting ``__spec__``
+   used when importing the module. Setting ``__spec__``
    appropriately applies equally to :ref:`modules initialized during
    interpreter startup <programs>`.  The one exception is ``__main__``,
    where ``__spec__`` is :ref:`set to None in some cases <main_spec>`.
 
+   When ``__package__`` is not defined, ``__spec__.parent`` is used as
+   a fallback.
+
    .. versionadded:: 3.4
+
+   .. versionchanged:: 3.6
+      ``__spec__.parent`` is used as a fallback when ``__package__`` is
+      not defined.
 
 .. attribute:: __path__
 
@@ -774,7 +785,7 @@ hooks <path entry hook>` in this list is called with a single argument, the
 path entry to be searched.  This callable may either return a :term:`path
 entry finder` that can handle the path entry, or it may raise
 :exc:`ImportError`.  An :exc:`ImportError` is used by the path based finder to
-signal that the hook cannot find a :term:`path entry finder`.
+signal that the hook cannot find a :term:`path entry finder`
 for that :term:`path entry`.  The
 exception is ignored and :term:`import path` iteration continues.  The hook
 should expect either a string or bytes object; the encoding of bytes objects
@@ -828,7 +839,7 @@ portion.
 
    Older path entry finders may implement one of these two deprecated methods
    instead of ``find_spec()``.  The methods are still respected for the
-   sake of backward compatibility.  Howevever, if ``find_spec()`` is
+   sake of backward compatibility.  However, if ``find_spec()`` is
    implemented on the path entry finder, the legacy methods are ignored.
 
    :meth:`~importlib.abc.PathEntryFinder.find_loader` takes one argument, the
@@ -876,7 +887,7 @@ import statements within that module.
 
 To selectively prevent import of some modules from a hook early on the
 meta path (rather than disabling the standard import system entirely),
-it is sufficient to raise :exc:`ImportError` directly from
+it is sufficient to raise :exc:`ModuleNoFoundError` directly from
 :meth:`~importlib.abc.MetaPathFinder.find_spec` instead of returning
 ``None``. The latter indicates that the meta path search should continue,
 while raising an exception terminates it immediately.

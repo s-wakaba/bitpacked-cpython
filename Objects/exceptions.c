@@ -59,15 +59,11 @@ BaseException_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 BaseException_init(PyBaseExceptionObject *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *tmp;
-
     if (!_PyArg_NoKeywords(Py_TYPE(self)->tp_name, kwds))
         return -1;
 
-    tmp = self->args;
-    self->args = args;
-    Py_INCREF(self->args);
-    Py_XDECREF(tmp);
+    Py_INCREF(args);
+    Py_XSETREF(self->args, args);
 
     return 0;
 }
@@ -234,7 +230,7 @@ BaseException_set_tb(PyBaseExceptionObject *self, PyObject *tb)
         return -1;
     }
 
-    Py_XINCREF(tb);
+    Py_INCREF(tb);
     Py_XSETREF(self->traceback, tb);
     return 0;
 }
@@ -328,11 +324,10 @@ PyException_GetCause(PyObject *self) {
 
 /* Steals a reference to cause */
 void
-PyException_SetCause(PyObject *self, PyObject *cause) {
-    PyObject *old_cause = ((PyBaseExceptionObject *)self)->cause;
-    ((PyBaseExceptionObject *)self)->cause = cause;
+PyException_SetCause(PyObject *self, PyObject *cause)
+{
     ((PyBaseExceptionObject *)self)->suppress_context = 1;
-    Py_XDECREF(old_cause);
+    Py_XSETREF(((PyBaseExceptionObject *)self)->cause, cause);
 }
 
 PyObject *
@@ -344,10 +339,9 @@ PyException_GetContext(PyObject *self) {
 
 /* Steals a reference to context */
 void
-PyException_SetContext(PyObject *self, PyObject *context) {
-    PyObject *old_context = ((PyBaseExceptionObject *)self)->context;
-    ((PyBaseExceptionObject *)self)->context = context;
-    Py_XDECREF(old_context);
+PyException_SetContext(PyObject *self, PyObject *context)
+{
+    Py_XSETREF(((PyBaseExceptionObject *)self)->context, context);
 }
 
 
@@ -618,36 +612,38 @@ SimpleExtendsException(PyExc_BaseException, KeyboardInterrupt,
 static int
 ImportError_init(PyImportErrorObject *self, PyObject *args, PyObject *kwds)
 {
+    static char *kwlist[] = {"name", "path", 0};
+    PyObject *empty_tuple;
     PyObject *msg = NULL;
     PyObject *name = NULL;
     PyObject *path = NULL;
 
-/* Macro replacement doesn't allow ## to start the first line of a macro,
-   so we move the assignment and NULL check into the if-statement. */
-#define GET_KWD(kwd) { \
-    kwd = PyDict_GetItemString(kwds, #kwd); \
-    if (kwd) { \
-        Py_INCREF(kwd); \
-        Py_XSETREF(self->kwd, kwd); \
-        if (PyDict_DelItemString(kwds, #kwd)) \
-            return -1; \
-    } \
-    }
-
-    if (kwds) {
-        GET_KWD(name);
-        GET_KWD(path);
-    }
-
-    if (BaseException_init((PyBaseExceptionObject *)self, args, kwds) == -1)
-        return -1;
-    if (PyTuple_GET_SIZE(args) != 1)
-        return 0;
-    if (!PyArg_UnpackTuple(args, "ImportError", 1, 1, &msg))
+    if (BaseException_init((PyBaseExceptionObject *)self, args, NULL) == -1)
         return -1;
 
-    Py_INCREF(msg);
-    Py_XSETREF(self->msg, msg);
+    empty_tuple = PyTuple_New(0);
+    if (!empty_tuple)
+        return -1;
+    if (!PyArg_ParseTupleAndKeywords(empty_tuple, kwds, "|$OO:ImportError", kwlist,
+                                     &name, &path)) {
+        Py_DECREF(empty_tuple);
+        return -1;
+    }
+    Py_DECREF(empty_tuple);
+
+    if (name) {
+        Py_INCREF(name);
+        Py_XSETREF(self->name, name);
+    }
+    if (path) {
+        Py_INCREF(path);
+        Py_XSETREF(self->path, path);
+    }
+    if (PyTuple_GET_SIZE(args) == 1) {
+        msg = PyTuple_GET_ITEM(args, 0);
+        Py_INCREF(msg);
+        Py_XSETREF(self->msg, msg);
+    }
 
     return 0;
 }
@@ -710,6 +706,13 @@ ComplexExtendsException(PyExc_Exception, ImportError,
                         0 /* getset */, ImportError_str,
                         "Import can't find module, or can't find name in "
                         "module.");
+
+/*
+ *    ModuleNotFoundError extends ImportError
+ */
+
+MiddlingExtendsException(PyExc_ImportError, ModuleNotFoundError, ImportError,
+                         "Module not found.");
 
 /*
  *    OSError extends Exception
@@ -991,7 +994,7 @@ OSError_init(PyOSErrorObject *self, PyObject *args, PyObject *kwds)
     return 0;
 
 error:
-    Py_XDECREF(args);
+    Py_DECREF(args);
     return -1;
 }
 
@@ -1071,8 +1074,7 @@ OSError_str(PyOSErrorObject *self)
     }
     if (self->myerrno && self->strerror)
         return PyUnicode_FromFormat("[Errno %S] %S",
-                                    self->myerrno ? self->myerrno: Py_None,
-                                    self->strerror ? self->strerror: Py_None);
+                                    self->myerrno, self->strerror);
     return BaseException_str((PyBaseExceptionObject *)self);
 }
 
@@ -1263,7 +1265,7 @@ SimpleExtendsException(PyExc_Exception, AttributeError,
  *    SyntaxError extends Exception
  */
 
-/* Helper function to customise error message for some syntax errors */
+/* Helper function to customize error message for some syntax errors */
 static int _report_missing_parentheses(PySyntaxErrorObject *self);
 
 static int
@@ -1855,7 +1857,7 @@ UnicodeEncodeError_str(PyObject *self)
         return PyUnicode_FromString("");
 
     /* Get reason and encoding as strings, which they might not be if
-       they've been modified after we were contructed. */
+       they've been modified after we were constructed. */
     reason_str = PyObject_Str(uself->reason);
     if (reason_str == NULL)
         goto done;
@@ -1980,7 +1982,7 @@ UnicodeDecodeError_str(PyObject *self)
         return PyUnicode_FromString("");
 
     /* Get reason and encoding as strings, which they might not be if
-       they've been modified after we were contructed. */
+       they've been modified after we were constructed. */
     reason_str = PyObject_Str(uself->reason);
     if (reason_str == NULL)
         goto done;
@@ -2078,7 +2080,7 @@ UnicodeTranslateError_str(PyObject *self)
         return PyUnicode_FromString("");
 
     /* Get reason as a string, which it might not be if it's been
-       modified after we were contructed. */
+       modified after we were constructed. */
     reason_str = PyObject_Str(uself->reason);
     if (reason_str == NULL)
         goto done;
@@ -2476,6 +2478,7 @@ _PyExc_Init(PyObject *bltinmod)
     PRE_INIT(SystemExit)
     PRE_INIT(KeyboardInterrupt)
     PRE_INIT(ImportError)
+    PRE_INIT(ModuleNotFoundError)
     PRE_INIT(OSError)
     PRE_INIT(EOFError)
     PRE_INIT(RuntimeError)
@@ -2548,6 +2551,7 @@ _PyExc_Init(PyObject *bltinmod)
     POST_INIT(SystemExit)
     POST_INIT(KeyboardInterrupt)
     POST_INIT(ImportError)
+    POST_INIT(ModuleNotFoundError)
     POST_INIT(OSError)
     INIT_ALIAS(EnvironmentError, OSError)
     INIT_ALIAS(IOError, OSError)
@@ -2610,7 +2614,9 @@ _PyExc_Init(PyObject *bltinmod)
     ADD_ERRNO(BlockingIOError, EWOULDBLOCK);
     POST_INIT(BrokenPipeError);
     ADD_ERRNO(BrokenPipeError, EPIPE);
+#ifdef ESHUTDOWN
     ADD_ERRNO(BrokenPipeError, ESHUTDOWN);
+#endif
     POST_INIT(ChildProcessError);
     ADD_ERRNO(ChildProcessError, ECHILD);
     POST_INIT(ConnectionAbortedError);

@@ -57,7 +57,7 @@ The module defines the following items:
     >>> with FTP("ftp1.at.proftpd.org") as ftp:
     ...     ftp.login()
     ...     ftp.dir()
-    ...
+    ... # doctest: +SKIP
     '230 Anonymous login ok, restrictions apply.'
     dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 .
     dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 ..
@@ -96,6 +96,13 @@ The module defines the following items:
       The class now supports hostname check with
       :attr:`ssl.SSLContext.check_hostname` and *Server Name Indication* (see
       :data:`ssl.HAS_SNI`).
+
+   .. deprecated:: 3.6
+
+       *keyfile* and *certfile* are deprecated in favor of *context*.
+       Please use :meth:`ssl.SSLContext.load_cert_chain` instead, or let
+       :func:`ssl.create_default_context` select the system's trusted CA
+       certificates for you.
 
    Here's a sample session using the :class:`FTP_TLS` class::
 

@@ -1239,9 +1239,10 @@ When programming in a compiled language, shared libraries are accessed when
 compiling/linking a program, and when the program is run.
 
 The purpose of the :func:`find_library` function is to locate a library in a way
-similar to what the compiler does (on platforms with several versions of a
-shared library the most recent should be loaded), while the ctypes library
-loaders act like when a program is run, and call the runtime loader directly.
+similar to what the compiler or runtime loader does (on platforms with several
+versions of a shared library the most recent should be loaded), while the ctypes
+library loaders act like when a program is run, and call the runtime loader
+directly.
 
 The :mod:`ctypes.util` module provides a function which can help to determine
 the library to load.
@@ -1253,14 +1254,20 @@ the library to load.
 
    Try to find a library and return a pathname.  *name* is the library name without
    any prefix like *lib*, suffix like ``.so``, ``.dylib`` or version number (this
-   is the form used for the posix linker option :option:`-l`).  If no library can
+   is the form used for the posix linker option :option:`!-l`).  If no library can
    be found, returns ``None``.
 
 The exact functionality is system dependent.
 
 On Linux, :func:`find_library` tries to run external programs
-(``/sbin/ldconfig``, ``gcc``, and ``objdump``) to find the library file.  It
-returns the filename of the library file.  Here are some examples::
+(``/sbin/ldconfig``, ``gcc``, ``objdump`` and ``ld``) to find the library file.
+It returns the filename of the library file.
+
+.. versionchanged:: 3.6
+   On Linux, the value of the environment variable ``LD_LIBRARY_PATH`` is used
+   when searching for libraries, if a library cannot be found by any other means.
+
+Here are some examples::
 
    >>> from ctypes.util import find_library
    >>> find_library("m")
@@ -1354,10 +1361,11 @@ function is used to load the library into the process, and to get a handle to
 it.
 
 The *mode* parameter can be used to specify how the library is loaded.  For
-details, consult the :manpage:`dlopen(3)` manpage, on Windows, *mode* is
-ignored.
+details, consult the :manpage:`dlopen(3)` manpage.  On Windows, *mode* is
+ignored.  On posix systems, RTLD_NOW is always added, and is not
+configurable.
 
-The *use_errno* parameter, when set to True, enables a ctypes mechanism that
+The *use_errno* parameter, when set to true, enables a ctypes mechanism that
 allows accessing the system :data:`errno` error number in a safe way.
 :mod:`ctypes` maintains a thread-local copy of the systems :data:`errno`
 variable; if you call foreign functions created with ``use_errno=True`` then the
@@ -1368,7 +1376,7 @@ The function :func:`ctypes.get_errno` returns the value of the ctypes private
 copy, and the function :func:`ctypes.set_errno` changes the ctypes private copy
 to a new value and returns the former value.
 
-The *use_last_error* parameter, when set to True, enables the same mechanism for
+The *use_last_error* parameter, when set to true, enables the same mechanism for
 the Windows error code which is managed by the :func:`GetLastError` and
 :func:`SetLastError` Windows API functions; :func:`ctypes.get_last_error` and
 :func:`ctypes.set_last_error` are used to request and change the ctypes private
@@ -1578,7 +1586,7 @@ type and the argument types of the function.
 
    The returned function prototype creates functions that use the standard C
    calling convention.  The function will release the GIL during the call.  If
-   *use_errno* is set to True, the ctypes private copy of the system
+   *use_errno* is set to true, the ctypes private copy of the system
    :data:`errno` variable is exchanged with the real :data:`errno` value before
    and after the call; *use_last_error* does the same for the Windows error
    code.
@@ -1664,32 +1672,30 @@ different ways, depending on the type and number of the parameters in the call:
 
    The optional third item is the default value for this parameter.
 
-This example demonstrates how to wrap the Windows ``MessageBoxA`` function so
+This example demonstrates how to wrap the Windows ``MessageBoxW`` function so
 that it supports default parameters and named arguments. The C declaration from
 the windows header file is this::
 
    WINUSERAPI int WINAPI
-   MessageBoxA(
+   MessageBoxW(
        HWND hWnd,
-       LPCSTR lpText,
-       LPCSTR lpCaption,
+       LPCWSTR lpText,
+       LPCWSTR lpCaption,
        UINT uType);
 
 Here is the wrapping with :mod:`ctypes`::
 
    >>> from ctypes import c_int, WINFUNCTYPE, windll
-   >>> from ctypes.wintypes import HWND, LPCSTR, UINT
-   >>> prototype = WINFUNCTYPE(c_int, HWND, LPCSTR, LPCSTR, UINT)
-   >>> paramflags = (1, "hwnd", 0), (1, "text", "Hi"), (1, "caption", None), (1, "flags", 0)
-   >>> MessageBox = prototype(("MessageBoxA", windll.user32), paramflags)
-   >>>
+   >>> from ctypes.wintypes import HWND, LPCWSTR, UINT
+   >>> prototype = WINFUNCTYPE(c_int, HWND, LPCWSTR, LPCWSTR, UINT)
+   >>> paramflags = (1, "hwnd", 0), (1, "text", "Hi"), (1, "caption", "Hello from ctypes"), (1, "flags", 0)
+   >>> MessageBox = prototype(("MessageBoxW", windll.user32), paramflags)
 
-The MessageBox foreign function can now be called in these ways::
+The ``MessageBox`` foreign function can now be called in these ways::
 
    >>> MessageBox()
    >>> MessageBox(text="Spam, spam, spam")
    >>> MessageBox(flags=2, text="foo bar")
-   >>>
 
 A second example demonstrates output parameters.  The win32 ``GetWindowRect``
 function retrieves the dimensions of a specified window by copying them into
@@ -1832,7 +1838,7 @@ Utility functions
 
    Try to find a library and return a pathname.  *name* is the library name
    without any prefix like ``lib``, suffix like ``.so``, ``.dylib`` or version
-   number (this is the form used for the posix linker option :option:`-l`).  If
+   number (this is the form used for the posix linker option :option:`!-l`).  If
    no library can be found, returns ``None``.
 
    The exact functionality is system dependent.

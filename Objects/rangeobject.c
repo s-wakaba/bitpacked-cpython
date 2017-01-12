@@ -6,7 +6,7 @@
 /* Support objects whose length is > PY_SSIZE_T_MAX.
 
    This could be sped up for small PyLongs if they fit in a Py_ssize_t.
-   This only matters on Win64.  Though we could use PY_LONG_LONG which
+   This only matters on Win64.  Though we could use long long which
    would presumably help perf.
 */
 
@@ -51,17 +51,10 @@ validate_step(PyObject *step)
         return PyLong_FromLong(1);
 
     step = PyNumber_Index(step);
-    if (step) {
-        Py_ssize_t istep = PyNumber_AsSsize_t(step, NULL);
-        if (istep == -1 && PyErr_Occurred()) {
-            /* Ignore OverflowError, we know the value isn't 0. */
-            PyErr_Clear();
-        }
-        else if (istep == 0) {
-            PyErr_SetString(PyExc_ValueError,
-                            "range() arg 3 must not be zero");
-            Py_CLEAR(step);
-        }
+    if (step && _PyLong_Sign(step) == 0) {
+        PyErr_SetString(PyExc_ValueError,
+                        "range() arg 3 must not be zero");
+        Py_CLEAR(step);
     }
 
     return step;
@@ -189,9 +182,9 @@ range_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         return (PyObject *) obj;
 
     /* Failed to create object, release attributes */
-    Py_XDECREF(start);
-    Py_XDECREF(stop);
-    Py_XDECREF(step);
+    Py_DECREF(start);
+    Py_DECREF(stop);
+    Py_DECREF(step);
     return NULL;
 }
 
@@ -256,7 +249,7 @@ compute_range_length(PyObject *start, PyObject *stop, PyObject *step)
     /* if (lo >= hi), return length of 0. */
     cmp_result = PyObject_RichCompareBool(lo, hi, Py_GE);
     if (cmp_result != 0) {
-        Py_XDECREF(step);
+        Py_DECREF(step);
         if (cmp_result < 0)
             return NULL;
         return PyLong_FromLong(0);
@@ -285,9 +278,9 @@ compute_range_length(PyObject *start, PyObject *stop, PyObject *step)
     return result;
 
   Fail:
+    Py_DECREF(step);
     Py_XDECREF(tmp2);
     Py_XDECREF(diff);
-    Py_XDECREF(step);
     Py_XDECREF(tmp1);
     Py_XDECREF(one);
     return NULL;
@@ -550,7 +543,7 @@ range_contains_long(rangeobject *r, PyObject *ob)
     tmp2 = PyNumber_Remainder(tmp1, r->step);
     if (tmp2 == NULL)
         goto end;
-    /* result = (int(ob) - start % step) == 0 */
+    /* result = ((int(ob) - start) % step) == 0 */
     result = PyObject_RichCompareBool(tmp2, zero, Py_EQ);
   end:
     Py_XDECREF(tmp1);
@@ -1196,12 +1189,27 @@ rangeiter_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
     long start, stop, step;
 
-    if (!_PyArg_NoKeywords("rangeiter()", kw))
+    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+                     "range_iterator(): creating instances of range_iterator "
+                     "by calling range_iterator type is deprecated",
+                     1)) {
         return NULL;
+    }
 
-    if (!PyArg_ParseTuple(args, "lll;rangeiter() requires 3 int arguments",
-                          &start, &stop, &step))
+    if (!_PyArg_NoKeywords("range_iterator()", kw)) {
         return NULL;
+    }
+
+    if (!PyArg_ParseTuple(args,
+                          "lll;range_iterator() requires 3 int arguments",
+                          &start, &stop, &step)) {
+        return NULL;
+    }
+    if (step == 0) {
+        PyErr_SetString(PyExc_ValueError,
+                        "range_iterator() arg 3 must not be zero");
+        return NULL;
+    }
 
     return fast_range_iter(start, stop, step);
 }

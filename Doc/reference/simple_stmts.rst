@@ -16,6 +16,7 @@ simple statements is:
               : | `assert_stmt`
               : | `assignment_stmt`
               : | `augmented_assignment_stmt`
+              : | `annotated_assignment_stmt`
               : | `pass_stmt`
               : | `del_stmt`
               : | `return_stmt`
@@ -84,7 +85,7 @@ attributes or items of mutable objects:
    assignment_stmt: (`target_list` "=")+ (`starred_expression` | `yield_expression`)
    target_list: `target` ("," `target`)* [","]
    target: `identifier`
-         : | "(" `target_list` ")"
+         : | "(" [`target_list`] ")"
          : | "[" [`target_list`] "]"
          : | `attributeref`
          : | `subscription`
@@ -312,6 +313,50 @@ For targets which are attribute references, the same :ref:`caveat about class
 and instance attributes <attr-target-note>` applies as for regular assignments.
 
 
+.. _annassign:
+
+Annotated assignment statements
+-------------------------------
+
+.. index::
+   pair: annotated; assignment
+   single: statement; assignment, annotated
+
+Annotation assignment is the combination, in a single statement,
+of a variable or attribute annotation and an optional assignment statement:
+
+.. productionlist::
+   annotated_assignment_stmt: `augtarget` ":" `expression` ["=" `expression`]
+
+The difference from normal :ref:`assignment` is that only single target and
+only single right hand side value is allowed.
+
+For simple names as assignment targets, if in class or module scope,
+the annotations are evaluated and stored in a special class or module
+attribute :attr:`__annotations__`
+that is a dictionary mapping from variable names (mangled if private) to
+evaluated annotations. This attribute is writable and is automatically
+created at the start of class or module body execution, if annotations
+are found statically.
+
+For expressions as assignment targets, the annotations are evaluated if
+in class or module scope, but not stored.
+
+If a name is annotated in a function scope, then this name is local for
+that scope. Annotations are never evaluated and stored in function scopes.
+
+If the right hand side is present, an annotated
+assignment performs the actual assignment before evaluating annotations
+(where applicable). If the right hand side is not present for an expression
+target, then the interpreter evaluates the target except for the last
+:meth:`__setitem__` or :meth:`__setattr__` call.
+
+.. seealso::
+
+   :pep:`526` - Variable and attribute annotation syntax
+   :pep:`484` - Type hints
+
+
 .. _assert:
 
 The :keyword:`assert` statement
@@ -447,6 +492,10 @@ generator is done and will cause :exc:`StopIteration` to be raised. The returned
 value (if any) is used as an argument to construct :exc:`StopIteration` and
 becomes the :attr:`StopIteration.value` attribute.
 
+In an asynchronous generator function, an empty :keyword:`return` statement
+indicates that the asynchronous generator is done and will cause
+:exc:`StopAsyncIteration` to be raised.  A non-empty :keyword:`return`
+statement is a syntax error in an asynchronous generator function.
 
 .. _yield:
 
@@ -859,11 +908,12 @@ block textually preceding that :keyword:`global` statement.
 
 Names listed in a :keyword:`global` statement must not be defined as formal
 parameters or in a :keyword:`for` loop control target, :keyword:`class`
-definition, function definition, or :keyword:`import` statement.
+definition, function definition, :keyword:`import` statement, or variable
+annotation.
 
 .. impl-detail::
 
-   The current implementation does not enforce the two restrictions, but
+   The current implementation does not enforce some of these restriction, but
    programs should not abuse this freedom, as future implementations may enforce
    them or silently change the meaning of the program.
 

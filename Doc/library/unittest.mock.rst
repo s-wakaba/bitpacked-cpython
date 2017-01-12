@@ -244,7 +244,7 @@ the *new_callable* argument to :func:`patch`.
 
       .. versionadded:: 3.5
 
-    * *wraps*: Item for the mock object to wrap. If *wraps* is not None then
+    * *wraps*: Item for the mock object to wrap. If *wraps* is not ``None`` then
       calling the Mock will pass the call through to the wrapped object
       (returning the real result). Attribute access on the mock will return a
       Mock object that wraps the corresponding attribute of the wrapped
@@ -261,6 +261,34 @@ the *new_callable* argument to :func:`patch`.
     Mocks can also be called with arbitrary keyword arguments. These will be
     used to set attributes on the mock after it is created. See the
     :meth:`configure_mock` method for details.
+
+    .. method:: assert_called(*args, **kwargs)
+
+        Assert that the mock was called at least once.
+
+            >>> mock = Mock()
+            >>> mock.method()
+            <Mock name='mock.method()' id='...'>
+            >>> mock.method.assert_called()
+
+        .. versionadded:: 3.6
+
+    .. method:: assert_called_once(*args, **kwargs)
+
+        Assert that the mock was called exactly once.
+
+            >>> mock = Mock()
+            >>> mock.method()
+            <Mock name='mock.method()' id='...'>
+            >>> mock.method.assert_called_once()
+            >>> mock.method()
+            <Mock name='mock.method()' id='...'>
+            >>> mock.method.assert_called_once()
+            Traceback (most recent call last):
+            ...
+            AssertionError: Expected 'method' to have been called once. Called 2 times.
+
+        .. versionadded:: 3.6
 
 
     .. method:: assert_called_with(*args, **kwargs)
@@ -324,7 +352,7 @@ the *new_callable* argument to :func:`patch`.
             >>> calls = [call(4), call(2), call(3)]
             >>> mock.assert_has_calls(calls, any_order=True)
 
-    .. method:: assert_not_called(*args, **kwargs)
+    .. method:: assert_not_called()
 
         Assert the mock was never called.
 
@@ -339,7 +367,7 @@ the *new_callable* argument to :func:`patch`.
         .. versionadded:: 3.5
 
 
-    .. method:: reset_mock()
+    .. method:: reset_mock(*, return_value=False, side_effect=False)
 
         The reset_mock method resets all the call attributes on a mock object:
 
@@ -351,11 +379,19 @@ the *new_callable* argument to :func:`patch`.
             >>> mock.called
             False
 
+        .. versionchanged:: 3.6
+           Added two keyword only argument to the reset_mock function.
+
         This can be useful where you want to make a series of assertions that
         reuse the same object. Note that :meth:`reset_mock` *doesn't* clear the
         return value, :attr:`side_effect` or any child attributes you have
-        set using normal assignment. Child mocks and the return value mock
+        set using normal assignment by default. In case you want to reset
+        *return_value* or :attr:`side_effect`, then pass the corresponding
+        parameter as ``True``. Child mocks and the return value mock
         (if any) are reset as well.
+
+        .. note:: *return_value*, and :attr:`side_effect` are keyword only
+                  argument.
 
 
     .. method:: mock_add_spec(spec, spec_set=False)

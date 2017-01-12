@@ -107,7 +107,7 @@ Directory and files operations
    If *follow_symlinks* is false, and *src* and *dst* both
    refer to symbolic links, :func:`copystat` will operate on
    the symbolic links themselves rather than the files the
-   symbolic links refer to--reading the information from the
+   symbolic links refer to—reading the information from the
    *src* symbolic link, and writing the information to the
    *dst* symbolic link.
 
@@ -425,7 +425,7 @@ Another example that uses the *ignore* argument to add a logging call::
    import logging
 
    def _logpath(path, names):
-       logging.info('Working in %s' % path)
+       logging.info('Working in %s', path)
        return []   # nothing will be ignored
 
    copytree(source, destination, ignore=_logpath)
@@ -603,7 +603,9 @@ found in the :file:`.ssh` directory of the user::
     >>> make_archive(archive_name, 'gztar', root_dir)
     '/Users/tarek/myarchive.tar.gz'
 
-The resulting archive contains::
+The resulting archive contains:
+
+.. code-block:: shell-session
 
     $ tar -tzvf /Users/tarek/myarchive.tar.gz
     drwx------ tarek/staff       0 2010-02-01 16:23:40 ./

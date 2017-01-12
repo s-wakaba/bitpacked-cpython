@@ -306,6 +306,13 @@ an error value).
    :mod:`warnings` module and the :option:`-W` option in the command line
    documentation.  There is no C API for warning control.
 
+.. c:function:: PyObject* PyErr_SetImportErrorSubclass(PyObject *msg, PyObject *name, PyObject *path)
+
+   Much like :c:func:`PyErr_SetImportError` but this function allows for
+   specifying a subclass of :exc:`ImportError` to raise.
+
+   .. versionadded:: 3.6
+
 
 .. c:function:: int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno, PyObject *module, PyObject *registry)
 
@@ -332,6 +339,14 @@ an error value).
    an ASCII-encoded string.
 
    .. versionadded:: 3.2
+
+
+.. c:function:: int PyErr_ResourceWarning(PyObject *source, Py_ssize_t stack_level, const char *format, ...)
+
+   Function similar to :c:func:`PyErr_WarnFormat`, but *category* is
+   :exc:`ResourceWarning` and pass *source* to :func:`warnings.WarningMessage`.
+
+   .. versionadded:: 3.6
 
 
 Querying the error indicator
@@ -773,6 +788,8 @@ the variables:
 | :c:data:`PyExc_FloatingPointError`      | :exc:`FloatingPointError`       |          |
 +-----------------------------------------+---------------------------------+----------+
 | :c:data:`PyExc_ImportError`             | :exc:`ImportError`              |          |
++-----------------------------------------+---------------------------------+----------+
+| :c:data:`PyExc_ModuleNotFoundError`     | :exc:`ModuleNotFoundError`      |          |
 +-----------------------------------------+---------------------------------+----------+
 | :c:data:`PyExc_IndexError`              | :exc:`IndexError`               |          |
 +-----------------------------------------+---------------------------------+----------+

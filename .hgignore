@@ -2,6 +2,7 @@
 .purify
 .svn/
 ^.idea/
+^.vscode/
 .DS_Store
 Makefile$
 Makefile.pre$
@@ -25,7 +26,6 @@ python-config$
 python-config.py$
 reflog.txt$
 tags$
-Lib/plat-mac/errors.rsrc.df.rsrc
 Misc/python.pc
 Misc/python-config.sh$
 Modules/Setup$
@@ -43,6 +43,7 @@ Parser/pgen$
 syntax: glob
 libpython*.a
 libpython*.so*
+libpython*.dylib
 *.swp
 *.o
 *.pyc
@@ -54,6 +55,7 @@ libpython*.so*
 *.profclang?
 *.profraw
 *.dyn
+Include/pydtrace_probes.h
 Lib/distutils/command/*.pdb
 Lib/lib2to3/*.pickle
 Lib/test/data/*
@@ -94,7 +96,10 @@ htmlcov/
 *.gcda
 *.gcno
 *.gcov
+ipch/
 coverage.info
 Tools/msi/obj
 Tools/ssl/amd64
 Tools/ssl/win32
+.vs/
+.vscode/

@@ -15,12 +15,16 @@ extern "C" {
 #define PyArg_Parse                     _PyArg_Parse_SizeT
 #define PyArg_ParseTuple                _PyArg_ParseTuple_SizeT
 #define PyArg_ParseTupleAndKeywords     _PyArg_ParseTupleAndKeywords_SizeT
+#ifndef Py_LIMITED_API
 #define PyArg_VaParse                   _PyArg_VaParse_SizeT
 #define PyArg_VaParseTupleAndKeywords   _PyArg_VaParseTupleAndKeywords_SizeT
+#endif /* !Py_LIMITED_API */
 #define Py_BuildValue                   _Py_BuildValue_SizeT
 #define Py_VaBuildValue                 _Py_VaBuildValue_SizeT
 #else
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _Py_VaBuildValue_SizeT(const char *, va_list);
+#endif /* !Py_LIMITED_API */
 #endif
 
 /* Due to a glitch in 3.2, the _SizeT versions weren't exported from the DLL. */
@@ -43,6 +47,32 @@ PyAPI_FUNC(int) PyArg_VaParseTupleAndKeywords(PyObject *, PyObject *,
                                                   const char *, char **, va_list);
 #endif
 PyAPI_FUNC(PyObject *) Py_VaBuildValue(const char *, va_list);
+
+#ifndef Py_LIMITED_API
+typedef struct _PyArg_Parser {
+    const char *format;
+    const char * const *keywords;
+    const char *fname;
+    const char *custom_msg;
+    int pos;            /* number of positional-only arguments */
+    int min;            /* minimal number of arguments */
+    int max;            /* maximal number of positional arguments */
+    PyObject *kwtuple;  /* tuple of keyword parameter names */
+    struct _PyArg_Parser *next;
+} _PyArg_Parser;
+#ifdef PY_SSIZE_T_CLEAN
+#define _PyArg_ParseTupleAndKeywordsFast  _PyArg_ParseTupleAndKeywordsFast_SizeT
+#define _PyArg_ParseStack  _PyArg_ParseStack_SizeT
+#define _PyArg_VaParseTupleAndKeywordsFast  _PyArg_VaParseTupleAndKeywordsFast_SizeT
+#endif
+PyAPI_FUNC(int) _PyArg_ParseTupleAndKeywordsFast(PyObject *, PyObject *,
+                                                 struct _PyArg_Parser *, ...);
+PyAPI_FUNC(int) _PyArg_ParseStack(PyObject **args, Py_ssize_t nargs, PyObject *kwnames,
+                                  struct _PyArg_Parser *, ...);
+PyAPI_FUNC(int) _PyArg_VaParseTupleAndKeywordsFast(PyObject *, PyObject *,
+                                                   struct _PyArg_Parser *, va_list);
+void _PyArg_Fini(void);
+#endif
 
 PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, PyObject *);
 PyAPI_FUNC(int) PyModule_AddIntConstant(PyObject *, const char *, long);

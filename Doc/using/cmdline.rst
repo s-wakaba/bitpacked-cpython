@@ -180,8 +180,15 @@ Generic options
 
    Print the Python version number and exit.  Example output could be::
 
-       Python 3.0
+       Python 3.6.0b2+
 
+   When given twice, print more information about the build, like::
+
+       Python 3.6.0b2+ (3.6:84a3c5003510+, Oct 26 2016, 02:33:55)
+       [GCC 6.2.0 20161005]
+
+   .. versionadded:: 3.6
+      The ``-VV`` option.
 
 .. _using-on-misc-options:
 
@@ -192,7 +199,7 @@ Miscellaneous options
 
    Issue a warning when comparing :class:`bytes` or :class:`bytearray` with
    :class:`str` or :class:`bytes` with :class:`int`.  Issue an error when the
-   option is given twice (:option:`-bb`).
+   option is given twice (:option:`!-bb`).
 
    .. versionchanged:: 3.5
       Affects comparisons of :class:`bytes` with :class:`int`.
@@ -239,9 +246,7 @@ Miscellaneous options
 
 .. cmdoption:: -O
 
-   Turn on basic optimizations.  This changes the filename extension for
-   compiled (:term:`bytecode`) files from ``.pyc`` to ``.pyo``.  See also
-   :envvar:`PYTHONOPTIMIZE`.
+   Turn on basic optimizations.  See also :envvar:`PYTHONOPTIMIZE`.
 
 
 .. cmdoption:: -OO
@@ -310,11 +315,12 @@ Miscellaneous options
 
    Print a message each time a module is initialized, showing the place
    (filename or built-in module) from which it is loaded.  When given twice
-   (:option:`-vv`), print a message for each file that is checked for when
+   (:option:`!-vv`), print a message for each file that is checked for when
    searching for a module.  Also provides information on module cleanup at exit.
    See also :envvar:`PYTHONVERBOSE`.
 
 
+.. _using-on-warnings:
 .. cmdoption:: -W arg
 
    Warning control.  Python's warning machinery by default prints warning
@@ -397,6 +403,8 @@ Miscellaneous options
      stored in a traceback of a trace. Use ``-X tracemalloc=NFRAME`` to start
      tracing with a traceback limit of *NFRAME* frames. See the
      :func:`tracemalloc.start` for more information.
+   * ``-X showalloccount`` to enable the output of the total count of allocated
+     objects for each type (only works when built with ``COUNT_ALLOCS`` defined);
 
    It also allows passing arbitrary values and retrieving them through the
    :data:`sys._xoptions` dictionary.
@@ -409,6 +417,9 @@ Miscellaneous options
 
    .. versionadded:: 3.4
       The ``-X showrefcount`` and ``-X tracemalloc`` options.
+
+   .. versionadded:: 3.6
+      The ``-X showalloccount`` option.
 
 
 Options you shouldn't use
@@ -556,6 +567,10 @@ conflict.
    .. versionchanged:: 3.4
       The ``encodingname`` part is now optional.
 
+   .. versionchanged:: 3.6
+      On Windows, the encoding specified by this variable is ignored for interactive
+      console buffers unless :envvar:`PYTHONLEGACYWINDOWSIOENCODING` is also specified.
+      Files and pipes redirected through the standard streams are not affected.
 
 .. envvar:: PYTHONNOUSERSITE
 
@@ -621,6 +636,81 @@ conflict.
    .. versionadded:: 3.4
 
 
+.. envvar:: PYTHONMALLOC
+
+   Set the Python memory allocators and/or install debug hooks.
+
+   Set the family of memory allocators used by Python:
+
+   * ``malloc``: use the :c:func:`malloc` function of the C library
+     for all domains (:c:data:`PYMEM_DOMAIN_RAW`, :c:data:`PYMEM_DOMAIN_MEM`,
+     :c:data:`PYMEM_DOMAIN_OBJ`).
+   * ``pymalloc``: use the :ref:`pymalloc allocator <pymalloc>` for
+     :c:data:`PYMEM_DOMAIN_MEM` and :c:data:`PYMEM_DOMAIN_OBJ` domains and use
+     the :c:func:`malloc` function for the :c:data:`PYMEM_DOMAIN_RAW` domain.
+
+   Install debug hooks:
+
+   * ``debug``: install debug hooks on top of the default memory allocator
+   * ``malloc_debug``: same as ``malloc`` but also install debug hooks
+   * ``pymalloc_debug``: same as ``pymalloc`` but also install debug hooks
+
+   When Python is compiled in release mode, the default is ``pymalloc``. When
+   compiled in debug mode, the default is ``pymalloc_debug`` and the debug hooks
+   are used automatically.
+
+   If Python is configured without ``pymalloc`` support, ``pymalloc`` and
+   ``pymalloc_debug`` are not available, the default is ``malloc`` in release
+   mode and ``malloc_debug`` in debug mode.
+
+   See the :c:func:`PyMem_SetupDebugHooks` function for debug hooks on Python
+   memory allocators.
+
+   .. versionadded:: 3.6
+
+
+.. envvar:: PYTHONMALLOCSTATS
+
+   If set to a non-empty string, Python will print statistics of the
+   :ref:`pymalloc memory allocator <pymalloc>` every time a new pymalloc object
+   arena is created, and on shutdown.
+
+   This variable is ignored if the :envvar:`PYTHONMALLOC` environment variable
+   is used to force the :c:func:`malloc` allocator of the C library, or if
+   Python is configured without ``pymalloc`` support.
+
+   .. versionchanged:: 3.6
+      This variable can now also be used on Python compiled in release mode.
+      It now has no effect if set to an empty string.
+
+
+.. envvar:: PYTHONLEGACYWINDOWSFSENCODING
+
+   If set to a non-empty string, the default filesystem encoding and errors mode
+   will revert to their pre-3.6 values of 'mbcs' and 'replace', respectively.
+   Otherwise, the new defaults 'utf-8' and 'surrogatepass' are used.
+
+   This may also be enabled at runtime with
+   :func:`sys._enablelegacywindowsfsencoding()`.
+
+   Availability: Windows
+
+   .. versionadded:: 3.6
+      See :pep:`529` for more details.
+
+.. envvar:: PYTHONLEGACYWINDOWSIOENCODING
+
+   If set to a non-empty string, does not use the new console reader and
+   writer. This means that Unicode characters will be encoded according to
+   the active console code page, rather than using utf-8.
+
+   This variable is ignored if the standard streams are redirected (to files
+   or pipes) rather than referring to console buffers.
+
+   Availability: Windows
+
+   .. versionadded:: 3.6
+
 Debug-mode variables
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -636,9 +726,3 @@ if Python was configured with the ``--with-pydebug`` build option.
 
    If set, Python will dump objects and reference counts still alive after
    shutting down the interpreter.
-
-
-.. envvar:: PYTHONMALLOCSTATS
-
-   If set, Python will print memory allocation statistics every time a new
-   object arena is created, and on shutdown.

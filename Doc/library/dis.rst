@@ -31,9 +31,9 @@ the following command can be used to display the disassembly of
 
    >>> dis.dis(myfunc)
      2           0 LOAD_GLOBAL              0 (len)
-                 3 LOAD_FAST                0 (alist)
-                 6 CALL_FUNCTION            1
-                 9 RETURN_VALUE
+                 2 LOAD_FAST                0 (alist)
+                 4 CALL_FUNCTION            1
+                 6 RETURN_VALUE
 
 (The "2" is a line number).
 
@@ -56,12 +56,12 @@ code.
    notably :func:`get_instructions`, as iterating over a :class:`Bytecode`
    instance yields the bytecode operations as :class:`Instruction` instances.
 
-   If *first_line* is not None, it indicates the line number that should be
+   If *first_line* is not ``None``, it indicates the line number that should be
    reported for the first source line in the disassembled code.  Otherwise, the
    source line information (if any) is taken directly from the disassembled code
    object.
 
-   If *current_offset* is not None, it refers to an instruction offset in the
+   If *current_offset* is not ``None``, it refers to an instruction offset in the
    disassembled code. Setting this means :meth:`.dis` will display a "current
    instruction" marker against the specified opcode.
 
@@ -197,7 +197,7 @@ operation is being performed, so the intermediate analysis object isn't useful:
    The iterator generates a series of :class:`Instruction` named tuples giving
    the details of each operation in the supplied code.
 
-   If *first_line* is not None, it indicates the line number that should be
+   If *first_line* is not ``None``, it indicates the line number that should be
    reported for the first source line in the disassembled code.  Otherwise, the
    source line information (if any) is taken directly from the disassembled code
    object.
@@ -249,7 +249,7 @@ details of bytecode instructions as :class:`Instruction` instances:
 
    .. data:: arg
 
-      numeric argument to operation (if any), otherwise None
+      numeric argument to operation (if any), otherwise ``None``
 
 
    .. data:: argval
@@ -269,7 +269,7 @@ details of bytecode instructions as :class:`Instruction` instances:
 
    .. data:: starts_line
 
-      line started by this opcode (if any), otherwise None
+      line started by this opcode (if any), otherwise ``None``
 
 
    .. data:: is_jump_target
@@ -607,6 +607,14 @@ iterations of the loop.
 
    .. versionadded:: 3.3
 
+.. opcode:: SETUP_ANNOTATIONS
+
+   Checks whether ``__annotations__`` is defined in ``locals()``, if not it is
+   set up to an empty ``dict``. This opcode is only emitted if a class
+   or module body contains :term:`variable annotations <variable annotation>`
+   statically.
+
+   .. versionadded:: 3.6
 
 .. opcode:: IMPORT_STAR
 
@@ -682,8 +690,7 @@ iterations of the loop.
    .. XXX explain the WHY stuff!
 
 
-All of the following opcodes expect arguments.  An argument is two bytes, with
-the more significant byte last.
+All of the following opcodes use their arguments.
 
 .. opcode:: STORE_NAME (namei)
 
@@ -767,6 +774,23 @@ the more significant byte last.
 
    Pushes a new dictionary object onto the stack.  The dictionary is pre-sized
    to hold *count* entries.
+
+
+.. opcode:: BUILD_CONST_KEY_MAP (count)
+
+   The version of :opcode:`BUILD_MAP` specialized for constant keys.  *count*
+   values are consumed from the stack.  The top element on the stack contains
+   a tuple of keys.
+
+   .. versionadded:: 3.6
+
+
+.. opcode:: BUILD_STRING (count)
+
+   Concatenates *count* strings from the stack and pushes the resulting string
+   onto the stack.
+
+   .. versionadded:: 3.6
 
 
 .. opcode:: LOAD_ATTR (namei)
@@ -874,6 +898,13 @@ the more significant byte last.
    Deletes local ``co_varnames[var_num]``.
 
 
+.. opcode:: STORE_ANNOTATION (namei)
+
+   Stores TOS as ``locals()['__annotations__'][co_names[namei]] = TOS``.
+
+   .. versionadded:: 3.6
+
+
 .. opcode:: LOAD_CLOSURE (i)
 
    Pushes a reference to the cell contained in slot *i* of the cell and free
@@ -929,25 +960,14 @@ the more significant byte last.
 .. opcode:: MAKE_FUNCTION (argc)
 
    Pushes a new function object on the stack.  From bottom to top, the consumed
-   stack must consist of
+   stack must consist of values if the argument carries a specified flag value
 
-   * ``argc & 0xFF`` default argument objects in positional order
-   * ``(argc >> 8) & 0xFF`` pairs of name and default argument, with the name
-     just below the object on the stack, for keyword-only parameters
-   * ``(argc >> 16) & 0x7FFF`` parameter annotation objects
-   * a tuple listing the parameter names for the annotations (only if there are
-     ony annotation objects)
+   * ``0x01`` a tuple of default argument objects in positional order
+   * ``0x02`` a dictionary of keyword-only parameters' default values
+   * ``0x04`` an annotation dictionary
+   * ``0x08`` a tuple containing cells for free variables, making a closure
    * the code associated with the function (at TOS1)
    * the :term:`qualified name` of the function (at TOS)
-
-
-.. opcode:: MAKE_CLOSURE (argc)
-
-   Creates a new function object, sets its *__closure__* slot, and pushes it on
-   the stack.  TOS is the :term:`qualified name` of the function, TOS1 is the
-   code associated with the function, and TOS2 is the tuple containing cells for
-   the closure's free variables.  *argc* is interpreted as in ``MAKE_FUNCTION``;
-   the annotations and defaults are also in the same order below TOS2.
 
 
 .. opcode:: BUILD_SLICE (argc)
@@ -987,6 +1007,28 @@ the more significant byte last.
    top element on the stack contains the keyword arguments dictionary, followed
    by the variable-arguments tuple, followed by explicit keyword and positional
    arguments.
+
+
+.. opcode:: FORMAT_VALUE (flags)
+
+   Used for implementing formatted literal strings (f-strings).  Pops
+   an optional *fmt_spec* from the stack, then a required *value*.
+   *flags* is interpreted as follows:
+
+   * ``(flags & 0x03) == 0x00``: *value* is formatted as-is.
+   * ``(flags & 0x03) == 0x01``: call :func:`str` on *value* before
+     formatting it.
+   * ``(flags & 0x03) == 0x02``: call :func:`repr` on *value* before
+     formatting it.
+   * ``(flags & 0x03) == 0x03``: call :func:`ascii` on *value* before
+     formatting it.
+   * ``(flags & 0x04) == 0x04``: pop *fmt_spec* from the stack and use
+     it, else use an empty *fmt_spec*.
+
+   Formatting is performed using :c:func:`PyObject_Format`.  The
+   result is pushed on the stack.
+
+   .. versionadded:: 3.6
 
 
 .. opcode:: HAVE_ARGUMENT

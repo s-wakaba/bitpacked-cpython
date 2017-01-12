@@ -1,7 +1,7 @@
 # Two-trick pony for OSX and other case insensitive file systems:
 # Ignore ./python binary on Unix but still look into ./Python/ directory.
 /python
-!/Python/**
+!/Python/
 *.cover
 *.o
 *.orig
@@ -21,8 +21,6 @@ Doc/venv/
 Lib/distutils/command/*.pdb
 Lib/lib2to3/*.pickle
 Lib/test/data/*
-Lib/_sysconfigdata.py
-Lib/plat-mac/errors.rsrc.df.rsrc
 Makefile
 Makefile.pre
 Misc/python.pc
@@ -69,10 +67,11 @@ config.status
 config.status.lineno
 core
 db_home
-config.log
-config.status
+.hg/
+ipch/
 libpython*.a
 libpython*.so*
+libpython*.dylib
 platform
 pybuilddir.txt
 pyconfig.h
@@ -93,3 +92,5 @@ htmlcov/
 Tools/msi/obj
 Tools/ssl/amd64
 Tools/ssl/win32
+.vs/
+.vscode/

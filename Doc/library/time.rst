@@ -83,6 +83,10 @@ An explanation of some terminology and conventions is in order.
      and :attr:`tm_zone` attributes when platform supports corresponding
      ``struct tm`` members.
 
+  .. versionchanged:: 3.6
+     The :class:`struct_time` attributes :attr:`tm_gmtoff` and :attr:`tm_zone`
+     are now available on all platforms.
+
 * Use the following functions to convert between time representations:
 
   +-------------------------+-------------------------+-------------------------+
@@ -566,10 +570,6 @@ The module defines the following functions and data items:
    :class:`struct_time`, or having elements of the wrong type, a
    :exc:`TypeError` is raised.
 
-  .. versionchanged:: 3.3
-     :attr:`tm_gmtoff` and :attr:`tm_zone` attributes are available on platforms
-     with C library supporting the corresponding fields in ``struct tm``.
-
 .. function:: time()
 
    Return the time in seconds since the epoch as a floating point number.
@@ -637,11 +637,11 @@ The module defines the following functions and data items:
          it is possible to refer to February 29.
 
       :samp:`M{m}.{n}.{d}`
-         The *d*'th day (0 <= *d* <= 6) or week *n* of month *m* of the year (1
+         The *d*'th day (0 <= *d* <= 6) of week *n* of month *m* of the year (1
          <= *n* <= 5, 1 <= *m* <= 12, where week 5 means "the last *d* day in
          month *m*" which may occur in either the fourth or the fifth
          week). Week 1 is the first week in which the *d*'th day occurs. Day
-         zero is Sunday.
+         zero is a Sunday.
 
       ``time`` has the same format as ``offset`` except that no leading sign
       ('-' or '+') is allowed. The default, if time is not given, is 02:00:00.
