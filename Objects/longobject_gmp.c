@@ -655,16 +655,13 @@ PyObject *
 PyLong_FromVoidPtr(void *p)
 {
 #if SIZEOF_VOID_P <= SIZEOF_LONG
-    return PyLong_FromUnsignedLong((unsigned long)(Py_uintptr_t)p);
+    return PyLong_FromUnsignedLong((unsigned long)(uintptr_t)p);
 #else
 
-#ifndef HAVE_LONG_LONG
-#   error "PyLong_FromVoidPtr: sizeof(void*) > sizeof(long), but no long long"
-#endif
 #if SIZEOF_LONG_LONG < SIZEOF_VOID_P
-#   error "PyLong_FromVoidPtr: sizeof(PY_LONG_LONG) < sizeof(void*)"
+#   error "PyLong_FromVoidPtr: sizeof(long long) < sizeof(void*)"
 #endif
-    return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG)(Py_uintptr_t)p);
+    return PyLong_FromUnsignedLongLong((unsigned long long)(uintptr_t)p);
 #endif /* SIZEOF_VOID_P <= SIZEOF_LONG */
 
 }
@@ -683,13 +680,10 @@ PyLong_AsVoidPtr(PyObject *vv)
         x = PyLong_AsUnsignedLong(vv);
 #else
 
-#ifndef HAVE_LONG_LONG
-#   error "PyLong_AsVoidPtr: sizeof(void*) > sizeof(long), but no long long"
-#endif
 #if SIZEOF_LONG_LONG < SIZEOF_VOID_P
-#   error "PyLong_AsVoidPtr: sizeof(PY_LONG_LONG) < sizeof(void*)"
+#   error "PyLong_AsVoidPtr: sizeof(long long) < sizeof(void*)"
 #endif
-    PY_LONG_LONG x;
+    long long x;
 
     if (PyLong_Check(vv) && _PyLong_Sign(vv) < 0)
         x = PyLong_AsLongLong(vv);
@@ -703,18 +697,16 @@ PyLong_AsVoidPtr(PyObject *vv)
     return (void *)x;
 }
 
-#ifdef HAVE_LONG_LONG
-
-/* Initial PY_LONG_LONG support by Chris Herborth (chrish@qnx.com), later
+/* Initial long long support by Chris Herborth (chrish@qnx.com), later
  * rewritten to use the newer PyLong_{As,From}ByteArray API.
  */
 
-#define PY_ABS_LLONG_MIN (0-(unsigned PY_LONG_LONG)PY_LLONG_MIN)
+#define PY_ABS_LLONG_MIN (0-(unsigned long long)PY_LLONG_MIN)
 
-/* Create a new int object from a C PY_LONG_LONG int. */
+/* Create a new int object from a C long long int. */
 
 PyObject *
-PyLong_FromLongLong(PY_LONG_LONG ival)
+PyLong_FromLongLong(long long ival)
 {
 #if SIZEOF_LONG_LONG == SIZEOF_LONG
     return PyLong_FromLong(ival);
@@ -724,10 +716,10 @@ PyLong_FromLongLong(PY_LONG_LONG ival)
 #endif
 }
 
-/* Create a new int object from a C unsigned PY_LONG_LONG int. */
+/* Create a new int object from a C unsigned long long int. */
 
 PyObject *
-PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG ival)
+PyLong_FromUnsignedLongLong(unsigned long long ival)
 {
 #if SIZEOF_LONG_LONG == SIZEOF_LONG
     return PyLong_FromUnsignedLong(ival);
@@ -766,37 +758,37 @@ PyLong_FromSize_t(size_t ival)
 /* Get a C long long int from an int object or any object that has an
    __int__ method.  Return -1 and set an error if overflow occurs. */
 
-PY_LONG_LONG
+long long
 PyLong_AsLongLong(PyObject *vv)
 {
-    PY_LONG_LONG bytes;
+    long long bytes;
     ASSURE_PYLONG_OBJECT_BEGIN(v, vv){
         if(_PyLong_AsByteArray(v, (unsigned char*)&bytes, sizeof(bytes),
                                PY_LITTLE_ENDIAN, 1) < 0){
             assert(PyErr_Occurred());
-            bytes = (PY_LONG_LONG)-1;
+            bytes = (long long)-1;
         }
     }ASSURE_PYLONG_OBJECT_END;
-    /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
+    /* Plan 9 can't handle long long in ? : expressions */
     return bytes;
 }
 
-/* Get a C unsigned PY_LONG_LONG int from an int object.
+/* Get a C unsigned long long int from an int object.
    Return -1 and set an error if overflow occurs. */
 
-unsigned PY_LONG_LONG
+unsigned long long
 PyLong_AsUnsignedLongLong(PyObject *vv)
 {
-    unsigned PY_LONG_LONG bytes;
+    unsigned long long bytes;
     int res;
 
     CONFIRM_PYLONG_OBJECT(vv);
     res = _PyLong_AsByteArray((PyLongObject *)vv, (unsigned char *)&bytes,
                               SIZEOF_LONG_LONG, PY_LITTLE_ENDIAN, 0);
 
-    /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
+    /* Plan 9 can't handle long long in ? : expressions */
     if (res < 0)
-        return (unsigned PY_LONG_LONG)res;
+        return (unsigned long long)res;
     else
         return bytes;
 }
@@ -804,10 +796,10 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
 /* Get a C unsigned long int from an int object, ignoring the high bits.
    Returns -1 and sets an error condition if an error occurs. */
 
-unsigned PY_LONG_LONG
+unsigned long long
 PyLong_AsUnsignedLongLongMask(PyObject *op)
 {
-    unsigned PY_LONG_LONG val = -1;
+    unsigned long long val = -1;
     ASSURE_PYLONG_OBJECT_BEGIN(v, op){
         Py_ssize_t i = Py_SIZE(v);
         int sign = 1;
@@ -838,11 +830,11 @@ PyLong_AsUnsignedLongLongMask(PyObject *op)
    In this case *overflow will be 0.
 */
 
-PY_LONG_LONG
+long long
 PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
 {
     /* This version by Tim Peters */
-    PY_LONG_LONG res;
+    long long res;
     *overflow = 0;
     ASSURE_PYLONG_OBJECT_BEGIN(v, vv){
         if(_PyLong_AsByteArray(v, (unsigned char*)&res, sizeof(res),
@@ -855,8 +847,6 @@ PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
     }ASSURE_PYLONG_OBJECT_END;
     return res;
 }
-
-#endif /* HAVE_LONG_LONG */
 
 #define CHECK_BINOP(v,w)                                \
     do {                                                \
@@ -872,14 +862,15 @@ PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
 
 static int
 long_format_binary(PyObject *aa, int base, int alternate,
-                   PyObject **p_output, _PyUnicodeWriter *writer)
+                   PyObject **p_output, _PyUnicodeWriter *writer,
+                   _PyBytesWriter *bytes_writer, char **bytes_str)
 {
     PyLongObject *a = (PyLongObject *)aa;
-    PyObject *v;
+    PyObject *v = NULL;
+    Py_ssize_t sz;
     enum PyUnicode_Kind kind;
     mpz_t ma;
     char *s = NULL;
-    ssize_t slen;
     int result = -1;
     static const char base_symbol[] = {0,0,'b',0,0,0,0,0,'o',0,0,0,0,0,0,0,'x'};
 
@@ -892,32 +883,32 @@ long_format_binary(PyObject *aa, int base, int alternate,
 
     s = mpz_get_str(NULL, base, mpz_init_set_pylong(ma, a));
 
-    slen = strlen(s);
+    sz = strlen(s);
     if (alternate) {
         /* 2 characters for prefix  */
-        slen += 2;
+        sz += 2;
     }
 
     if (writer) {
-        if (_PyUnicodeWriter_Prepare(writer, slen, 'x') == -1)
+        if (_PyUnicodeWriter_Prepare(writer, sz, 'x') == -1)
             goto exit_long_format_binary;
         kind = writer->kind;
-        v = NULL;
+    }
+    else if (bytes_writer) {
+        *bytes_str = _PyBytesWriter_Prepare(bytes_writer, *bytes_str, sz);
+        if (*bytes_str == NULL)
+            goto exit_long_format_binary;
     }
     else {
-        v = PyUnicode_New(slen, 'x');
+        v = PyUnicode_New(sz, 'x');
         if (v == NULL)
             goto exit_long_format_binary;
         kind = PyUnicode_KIND(v);
     }
-#define WRITE_DIGITS_X(TYPE)                                            \
+
+#define WRITE_DIGITS_X(p)                                               \
     do {                                                                \
-        TYPE *p;                                                        \
         char *c = s;                                                    \
-        if (writer)                                                     \
-            p = (TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos;    \
-        else                                                            \
-            p = (TYPE*)PyUnicode_DATA(v);                               \
         if(*c == '-')                                                   \
             *p++ = *c++;                                                \
         if (alternate) {                                                \
@@ -926,25 +917,43 @@ long_format_binary(PyObject *aa, int base, int alternate,
         }                                                               \
         while(*c)                                                       \
             *p++ = *c++;                                                \
+    } while (0)
+#define WRITE_UNICODE_DIGITS_X(TYPE)                                    \
+    do {                                                                \
+        TYPE *p;                                                        \
+        if (writer)                                                     \
+            p = (TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos;    \
+        else                                                            \
+            p = (TYPE*)PyUnicode_DATA(v);                               \
+        WRITE_DIGITS_X(p);                                              \
         if (writer)                                                     \
             assert(p == ((TYPE*)PyUnicode_DATA(writer->buffer)          \
-                             + writer->pos + slen));                    \
+                             + writer->pos + sz));                      \
         else                                                            \
-            assert(p == ((TYPE*)PyUnicode_DATA(v)+slen));               \
+            assert(p == ((TYPE*)PyUnicode_DATA(v) + sz));               \
     } while (0)
-    if (kind == PyUnicode_1BYTE_KIND) {
-        WRITE_DIGITS_X(Py_UCS1);
+    if (bytes_writer) {
+        char *p = *bytes_str;
+        WRITE_DIGITS_X(p);
+        assert(p == *bytes_str + sz);
+    }
+    else if (kind == PyUnicode_1BYTE_KIND) {
+        WRITE_UNICODE_DIGITS_X(Py_UCS1);
     }
     else if (kind == PyUnicode_2BYTE_KIND) {
-        WRITE_DIGITS_X(Py_UCS2);
+        WRITE_UNICODE_DIGITS_X(Py_UCS2);
     }
     else {
         assert (kind == PyUnicode_4BYTE_KIND);
-        WRITE_DIGITS_X(Py_UCS4);
+        WRITE_UNICODE_DIGITS_X(Py_UCS4);
     }
 #undef WRITE_DIGITS_X
+#undef WRITE_UNICODE_DIGITS_X
     if (writer) {
-        writer->pos += slen;
+        writer->pos += sz;
+    }
+    else if (bytes_writer) {
+        (*bytes_str) += sz;
     }
     else {
         assert(_PyUnicode_CheckConsistency(v, 1));
@@ -960,7 +969,7 @@ static PyObject *
 long_to_decimal_string(PyObject *aa)
 {
     PyObject *v;
-    if (long_format_binary(aa, 10, 0, &v, NULL) == -1)
+    if (long_format_binary(aa, 10, 0, &v, NULL, NULL, NULL) == -1)
         return NULL;
     return v;
 }
@@ -969,7 +978,8 @@ PyObject *
 _PyLong_Format(PyObject *obj, int base)
 {
     PyObject *str;
-    if (long_format_binary(obj, base, (base != 10), &str, NULL) == -1)
+    if (long_format_binary(obj, base, (base != 10), &str, NULL,
+                           NULL, NULL) == -1)
         return NULL;
     return str;
 }
@@ -981,7 +991,26 @@ _PyLong_FormatWriter(_PyUnicodeWriter *writer,
 {
     if (base == 10)
         alternate = 0;
-    return long_format_binary(obj, base, alternate, NULL, writer);
+    return long_format_binary(obj, base, alternate, NULL, writer,
+                              NULL, NULL);
+}
+
+char*
+_PyLong_FormatBytesWriter(_PyBytesWriter *writer, char *str,
+                          PyObject *obj,
+                          int base, int alternate)
+{
+    char *str2;
+    int res;
+    str2 = str;
+    if (base == 10)
+        alternate = 0;
+    res = long_format_binary(obj, base, alternate, NULL, NULL,
+                             writer, &str2);
+    if (res < 0)
+        return NULL;
+    assert(str2 != NULL);
+    return str2;
 }
 
 /* Table of digit values for 8-bit string -> integer conversion.
@@ -1091,23 +1120,29 @@ PyLong_FromString(const char *str, char **pend, int base)
                         "int() arg 2 must be >= 2 and <= 36");
         return NULL;
     }
-    while (*str != '\0' && Py_ISSPACE(Py_CHARMASK(*str)))
+    while (*str != '\0' && Py_ISSPACE(Py_CHARMASK(*str))) {
         str++;
-    if (*str == '+')
+    }
+    if (*str == '+') {
         ++str;
+    }
     else if (*str == '-') {
         ++str;
         sign = -1;
     }
     if (base == 0) {
-        if (str[0] != '0')
+        if (str[0] != '0') {
             base = 10;
-        else if (str[1] == 'x' || str[1] == 'X')
+        }
+        else if (str[1] == 'x' || str[1] == 'X') {
             base = 16;
-        else if (str[1] == 'o' || str[1] == 'O')
+        }
+        else if (str[1] == 'o' || str[1] == 'O') {
             base = 8;
-        else if (str[1] == 'b' || str[1] == 'B')
+        }
+        else if (str[1] == 'b' || str[1] == 'B') {
             base = 2;
+        }
         else {
             /* "old" (C-style) octal literal, now invalid.
                it might still be zero though */
@@ -1118,42 +1153,59 @@ PyLong_FromString(const char *str, char **pend, int base)
     if (str[0] == '0' &&
         ((base == 16 && (str[1] == 'x' || str[1] == 'X')) ||
          (base == 8  && (str[1] == 'o' || str[1] == 'O')) ||
-         (base == 2  && (str[1] == 'b' || str[1] == 'B'))))
+         (base == 2  && (str[1] == 'b' || str[1] == 'B')))) {
         str += 2;
+        /* One underscore allowed here. */
+        if (*str == '_') {
+            ++str;
+        }
+    }
+    if (str[0] == '_') {
+	    /* May not start with underscores. */
+	    goto onError;
+    }
 
     start = str;
 
     z = long_from_binary_base(&str, base, sign);
 
-    if (z == NULL)
+    if (z == NULL) {
         return NULL;
+    }
     if (error_if_nonzero) {
         /* reset the base to 0, else the exception message
            doesn't make too much sense */
         base = 0;
-        if (Py_SIZE(z) != 0)
+        if (Py_SIZE(z) != 0) {
             goto onError;
+        }
         /* there might still be other problems, therefore base
            remains zero here for the same reason */
     }
-    if (str == start)
+    if (str == start) {
         goto onError;
-    while (*str && Py_ISSPACE(Py_CHARMASK(*str)))
+    }
+    while (*str && Py_ISSPACE(Py_CHARMASK(*str))) {
         str++;
-    if (*str != '\0')
+    }
+    if (*str != '\0') {
         goto onError;
-    if (pend != NULL)
+    }
+    if (pend != NULL) {
         *pend = (char *)str;
+    }
     return (PyObject *) z;
 
   onError:
-    if (pend != NULL)
+    if (pend != NULL) {
         *pend = (char *)str;
+    }
     Py_XDECREF(z);
     slen = strlen(orig_str) < 200 ? strlen(orig_str) : 200;
     strobj = PyUnicode_FromStringAndSize(orig_str, slen);
-    if (strobj == NULL)
+    if (strobj == NULL) {
         return NULL;
+    }
     PyErr_Format(PyExc_ValueError,
                  "invalid literal for int() with base %d: %.200R",
                  base, strobj);
@@ -1717,9 +1769,9 @@ long_true_divide(PyObject *v, PyObject *w)
     /* Round by directly modifying the low digit of x. */
     mask = (digit)1 << (extra_bits - 1);
     low = uu[0] | inexact;
-    if (low & mask && low & (3*mask-1))
+    if ((low & mask) && (low & (3U*mask-1U)))
         low += mask;
-    uu[0] = low & ~(mask-1U);
+    uu[0] = low & ~(2U*mask-1U);
 
     /* Convert x to a double dx; the conversion is exact. */
     dx = uu[--uusize];
@@ -2080,7 +2132,7 @@ long_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     tmp = (PyLongObject *)long_new(&PyLong_Type, args, kwds);
     if (tmp == NULL)
         return NULL;
-    assert(PyLong_CheckExact(tmp));
+    assert(PyLong_Check(tmp));
     n = Py_SIZE(tmp);
     if (n < 0)
         n = -n;
@@ -2345,9 +2397,9 @@ long_to_bytes(PyLongObject *v, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    if (!PyUnicode_CompareWithASCIIString(byteorder_str, "little"))
+    if (_PyUnicode_EqualToASCIIString(byteorder_str, "little"))
         little_endian = 1;
-    else if (!PyUnicode_CompareWithASCIIString(byteorder_str, "big"))
+    else if (_PyUnicode_EqualToASCIIString(byteorder_str, "big"))
         little_endian = 0;
     else {
         PyErr_SetString(PyExc_ValueError,
@@ -2428,9 +2480,9 @@ long_from_bytes(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    if (!PyUnicode_CompareWithASCIIString(byteorder_str, "little"))
+    if (_PyUnicode_EqualToASCIIString(byteorder_str, "little"))
         little_endian = 1;
-    else if (!PyUnicode_CompareWithASCIIString(byteorder_str, "big"))
+    else if (_PyUnicode_EqualToASCIIString(byteorder_str, "big"))
         little_endian = 0;
     else {
         PyErr_SetString(PyExc_ValueError,
